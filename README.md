@@ -202,4 +202,4 @@ The demo data re-seeds automatically.
 
 ## Author
 
-**Sakshi Anand** · [GitHub](https://github.com/sakshianand19)
+**Sakshi Anand** · [GitHub](https://github.com/sakshianand19) · [LinkedIn](https://www.linkedin.com/in/sakshi-anand-731464216/)
