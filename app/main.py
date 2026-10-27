@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import get_settings
 from app.database import init_db
-from app.routers import assessments, content, homework, questions, students, topics
+from app.routers import assessments, content, homework, questions, reports, staff, students, topics
 from app.services.llm import llm_provider_name
 
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +40,7 @@ def create_app() -> FastAPI:
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
     )
     for router in (students.router, topics.router, content.router, questions.router,
-                   assessments.router, homework.router):
+                   assessments.router, homework.router, staff.router, reports.router):
         app.include_router(router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["meta"])

@@ -10,9 +10,10 @@
 **[Live demo](https://ai-personalized-learning-platform-nu.vercel.app)** · **[API docs](https://ai-personalized-learning-platform-nu.vercel.app/docs)**
 
 A full-stack personalized learning platform: a FastAPI backend that uses Azure OpenAI through
-LangChain to process learning material and validate questions, plus an interactive web app where
-students take quizzes, complete adaptive homework, see their learning gaps and follow a
-personalized study path.
+LangChain to process learning material and validate questions, plus an interactive web app with
+separate **student**, **teacher** and **admin** views. Students take quizzes, complete adaptive
+homework and follow a personalized study path; teachers track their class and assign work;
+admins manage users, classes and the curriculum.
 
 ![Student dashboard with mastery per topic, learning gaps and recent activity](docs/screenshots/dashboard.png)
 
@@ -29,6 +30,28 @@ personalized study path.
 Teachers (or the Content Studio) add learning material. The AI summarizes it, extracts key
 concepts, rates its difficulty and generates questions. Every question passes a validator before
 it reaches students.
+
+## Three views: student, teacher, admin
+
+Switch roles from the **Student / Teacher / Admin** toggle in the top bar, then pick who you are
+from the menu beside it. The demo is seeded with an admin, two teachers and a class of six
+students with quiz history, so every view has data from the start.
+
+| Role | What they can do |
+| --- | --- |
+| **Student** | Dashboard with mastery and gaps, practice quizzes, adaptive homework, personalized learning path |
+| **Teacher** | Class overview with a mastery heatmap and "needs attention" list, per-student insights, assign homework to one or many students (each gets their own weakest topic), Content Studio, Validator |
+| **Admin** | Platform stats and recent activity, add and remove students, teachers and admins, move students between classes, manage topics, Content Studio, Validator |
+
+Teachers and admins can also **view as a student** to see exactly what that student sees.
+
+| Teacher: class overview | Admin: platform overview |
+| --- | --- |
+| ![Teacher class overview with topic performance, students needing attention and a mastery heatmap](docs/screenshots/teacher-class.png) | ![Admin overview with platform stats, classes, recent activity and curriculum inventory](docs/screenshots/admin-overview.png) |
+
+> The role switcher is a demo convenience: there's no login, so anyone can open any view. A
+> production deployment would put authentication (for example Azure AD B2C or OAuth) in front of
+> these views and check the role on every API request.
 
 ## Screenshots
 
@@ -61,13 +84,11 @@ the service logs it and falls back the same way.
 The frontend is plain HTML/CSS/JS in `app/static/`, served by FastAPI at `/`, so there's no build
 step.
 
-- **Dashboard:** overall mastery, per-topic mastery bars, prioritized learning gaps with one-click practice, recent activity
-- **Practice:** pick topics and take a quiz (keyboard shortcuts A–D and ← →), then review every answer with explanations
-- **Homework:** assign adaptive homework (auto-targets the weakest topic) and complete it in the quiz player
-- **Learning path:** a timeline ordered by urgency with level-matched study material
-- **Content Studio:** paste material for AI analysis and generate validated questions
-- **Validator:** check a question against the rules and the LLM reviewer
-- Light and dark themes, multiple students, mobile bottom navigation
+- **Student:** dashboard, practice quizzes (keyboard shortcuts A–D and ← →) with answer review, homework, learning-path timeline
+- **Teacher:** class overview and heatmap, student insights, bulk homework assignment
+- **Admin:** platform overview, user and class management, topic management
+- **Shared:** Content Studio (AI analysis and validated question generation) and Validator
+- Light and dark themes, mobile bottom navigation
 
 ## Tech stack
 
@@ -88,10 +109,12 @@ app/
 ├── static/              Single-page web app (index.html, styles.css, app.js)
 ├── config.py            Settings from environment / .env (pydantic-settings)
 ├── database.py          SQLAlchemy engine/session, table creation, demo seeding
-├── models.py            ORM models (students, topics, content, questions, assessments,
+├── models.py            ORM models (staff, students, topics, content, questions, assessments,
 │                        homework, submissions, responses, topic mastery)
 ├── schemas.py           Pydantic request/response models
-├── routers/             students · topics · content · questions · assessments · homework
+├── seed.py              Demo curriculum, staff and a class with quiz history
+├── routers/             students · staff · topics · content · questions · assessments ·
+│                        homework · reports (class and platform)
 └── services/
     ├── llm.py                 Azure OpenAI chat model (LangChain) as a FastAPI dependency
     ├── content_processor.py   LangChain chains for analysis + question generation
@@ -105,7 +128,8 @@ docs/screenshots/        Images used in this README
 
 **Database efficiency:** a composite index on `(topic_id, is_validated)`, `selectinload` for
 assessment and homework questions, and single batched queries for mastery updates and
-learning-path content (no N+1 queries).
+learning-path content (no N+1 queries). The class report builds a whole class's mastery and gaps
+in three queries, however many students it has.
 
 ## API overview
 
@@ -113,7 +137,12 @@ All endpoints are under `/api/v1`. Interactive docs are at `/docs`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` / `GET` | `/students` | Create / list students |
+| `POST` / `GET` | `/students` | Create / list students (filter by `teacher_id`) |
+| `PATCH` / `DELETE` | `/students/{id}` | Update a student or move them to another class / delete them and their history |
+| `POST` / `GET` | `/staff` | Create / list admins and teachers (filter by `role`) |
+| `DELETE` | `/staff/{id}` | Remove a staff member (their students become unassigned; the last admin can't be removed) |
+| `GET` | `/reports/class` | Teacher view: per-student mastery heatmap, gaps and topic averages |
+| `GET` | `/reports/platform` | Admin view: counts, average score, curriculum inventory, recent activity |
 | `GET` | `/students/{id}/learning-gaps` | Gap report with severity and recommended actions |
 | `GET` | `/students/{id}/learning-path` | Personalized, ordered study plan |
 | `GET` | `/students/{id}/submissions` | Recent graded quizzes and homework |
@@ -171,7 +200,7 @@ Open http://localhost:8000 for the web app or http://localhost:8000/docs for the
 | `AZURE_OPENAI_DEPLOYMENT` | – | Chat model deployment name |
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | API version |
 | `DATABASE_URL` | SQLite (`/tmp` on Vercel) | Any SQLAlchemy URL; `postgres://` URLs are supported |
-| `SEED_DEMO_DATA` | `true` | Seed demo topics, content, questions and a student |
+| `SEED_DEMO_DATA` | `true` | Seed demo topics, content, questions, staff and a class with quiz history |
 | `MASTERY_THRESHOLD` | `0.6` | Mastery below this is a learning gap |
 | `MIN_ATTEMPTS_FOR_GAP` | `2` | Answers needed before a topic can be judged |
 

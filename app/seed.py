@@ -1,9 +1,14 @@
-"""Demo data so a fresh deployment has topics, content and validated questions to explore."""
+"""Demo data so a fresh deployment has a curriculum, staff and a class with quiz history.
 
+Seeding is deterministic, so every serverless instance starts with identical data.
+"""
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import LearningContent, Question, Student, Topic
+from app.models import Assessment, LearningContent, Question, Staff, Student, Topic
 from app.services.content_processor import heuristic_analysis
+from app.services.grading import grade_submission
 
 DEMO_CURRICULUM = [
     {
@@ -96,5 +101,68 @@ def seed_demo_data(db: Session) -> None:
             )
             for text, options, answer, difficulty in item["questions"]
         )
-    db.add(Student(name="Demo Student", email="demo@student.example", grade_level=7))
+    db.flush()
+    _seed_people(db)
+
+
+DEMO_STAFF = [
+    ("Neha Kapoor", "admin@learnpath.example", "admin", ""),
+    ("Ms. Priya Verma", "priya.verma@learnpath.example", "teacher", "Mathematics"),
+    ("Mr. Rohan Mehta", "rohan.mehta@learnpath.example", "teacher", "Science"),
+]
+
+# (name, email, grade, teacher email, answers per topic: 1 = correct, 0 = wrong).
+# The demo student has no history so visitors can take the diagnostic themselves.
+DEMO_STUDENTS = [
+    ("Demo Student", "demo@student.example", 7, "priya.verma@learnpath.example", None),
+    ("Aarav Sharma", "aarav@student.example", 7, "priya.verma@learnpath.example",
+     {"Fractions": [1, 0, 0, 0], "Linear Equations": [1, 1, 1, 0], "Photosynthesis": [1, 1, 1, 1]}),
+    ("Diya Patel", "diya@student.example", 7, "priya.verma@learnpath.example",
+     {"Fractions": [1, 1, 1, 1], "Linear Equations": [1, 1, 1, 1], "Photosynthesis": [1, 1, 0, 1]}),
+    ("Kabir Singh", "kabir@student.example", 8, "priya.verma@learnpath.example",
+     {"Fractions": [1, 0, 1, 0], "Linear Equations": [0, 0, 1, 0], "Photosynthesis": [1, 1, 0, 0]}),
+    ("Ananya Rao", "ananya@student.example", 8, "rohan.mehta@learnpath.example",
+     {"Fractions": [1, 1, 1, 0], "Linear Equations": [1, 1, 0, 1], "Photosynthesis": [0, 1, 0, 0]}),
+    ("Ishaan Gupta", "ishaan@student.example", 8, "rohan.mehta@learnpath.example",
+     {"Fractions": [0, 0, 1, 0], "Linear Equations": [1, 0, 0, 0], "Photosynthesis": [1, 1, 1, 0]}),
+]
+
+
+def _seed_people(db: Session) -> None:
+    staff = {email: Staff(name=name, email=email, role=role, subject=subject)
+             for name, email, role, subject in DEMO_STAFF}
+    db.add_all(staff.values())
+    db.flush()
+
+    questions_by_topic: dict[str, list[Question]] = {}
+    for topic in db.scalars(select(Topic)):
+        questions_by_topic[topic.name] = list(
+            db.scalars(select(Question).where(Question.topic_id == topic.id).order_by(Question.id))
+        )
+    diagnostic = Assessment(
+        title="Diagnostic", questions=[q for qs in questions_by_topic.values() for q in qs]
+    )
+    db.add(diagnostic)
+
+    for name, email, grade, teacher_email, pattern in DEMO_STUDENTS:
+        student = Student(
+            name=name, email=email, grade_level=grade, teacher_id=staff[teacher_email].id
+        )
+        db.add(student)
+        db.flush()
+        if pattern is None:
+            continue
+        answers = {}
+        for topic_name, results in pattern.items():
+            for question, correct in zip(questions_by_topic[topic_name], results):
+                wrong = next(o for o in question.options if o != question.correct_answer)
+                answers[question.id] = question.correct_answer if correct else wrong
+        # grade_submission commits, which also persists everything flushed above.
+        grade_submission(
+            db,
+            student_id=student.id,
+            questions=diagnostic.questions,
+            answers=answers,
+            assessment_id=diagnostic.id,
+        )
     db.commit()

@@ -359,6 +359,49 @@ kbd { font: inherit; font-size: 11.5px; padding: 1px 6px; border-radius: 5px; bo
 .skeleton { border-radius: var(--radius); background: linear-gradient(90deg, var(--surface-2), var(--surface), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
+/* ---------- Roles ---------- */
+.role-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+.role-switch button {
+  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; transition: all .15s;
+}
+.role-switch button:hover { color: var(--text); }
+.role-switch button.on { background: var(--surface); color: var(--accent-text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line); }
+.avatar[data-role="teacher"] { background: linear-gradient(135deg, #0f9d74, #34c3a0); }
+.avatar[data-role="admin"] { background: linear-gradient(135deg, #e0761f, #f2a541); }
+.role-note { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 0 4px 4px; }
+.role-note .pill { align-self: flex-start; }
+
+/* ---------- Tables & heatmap ---------- */
+.table-wrap { overflow-x: auto; margin: 0 -4px; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table td.actions { text-align: right; white-space: nowrap; }
+.table td.actions .btn + .btn { margin-left: 4px; }
+.table tr[data-href] { cursor: pointer; transition: background .12s; }
+.table tr[data-href]:hover { background: var(--surface-2); }
+.heatmap th:not(:first-child), .heatmap td:not(:first-child) { text-align: center; }
+.heat { display: inline-block; min-width: 56px; padding: 6px 8px; border-radius: 8px; font-weight: 700; font-size: 13px; }
+.heat.good { background: var(--good-soft); color: var(--good); }
+.heat.warn { background: var(--warn-soft); color: var(--warn); }
+.heat.bad { background: var(--bad-soft); color: var(--bad); }
+.heat.neutral { background: var(--neutral-soft); color: var(--neutral); }
+.heat.dot { min-width: 0; width: 12px; height: 12px; padding: 0; border-radius: 4px; }
+.legend { gap: 16px; margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+.input.compact { padding: 6px 10px; font-size: 13.5px; min-width: 150px; }
+.btn.danger:hover { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.tabs a { padding: 10px 14px; color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 8px; align-items: center; }
+.tabs a:hover { color: var(--text); }
+.tabs a.on { color: var(--accent-text); border-bottom-color: var(--accent); }
+.tabs .count { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); }
+.back-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-weight: 600; margin-bottom: 14px; }
+.back-link:hover { color: var(--accent-text); }
+.profile-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1024px) {
   .grid.cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -381,11 +424,20 @@ kbd { font: inherit; font-size: 11.5px; padding: 1px 6px; border-radius: 5px; bo
   .hero { padding: 24px; }
   .toasts { left: 16px; right: 16px; bottom: 80px; }
 }
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; }
+  .topbar-actions { width: 100%; gap: 6px; }
+  .role-switch { flex: none; }
+  .role-switch button { padding: 6px 9px; font-size: 12.5px; }
+  .student-picker { flex: 1; min-width: 0; padding-left: 10px; }
+  .student-picker .avatar { display: none; }
+  .student-picker select { width: 100%; max-width: none; text-overflow: ellipsis; }
+  .icon-only { flex: none; }
+}
 @media (max-width: 480px) {
   .grid.cols-4 { gap: 12px; }
   .grid.cols-4 .stat { flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; }
   .stat-icon { width: 38px; height: 38px; }
   .stat-value { font-size: 22px; }
-  .student-picker select { max-width: 120px; }
   .topbar-title { display: none; }
 }

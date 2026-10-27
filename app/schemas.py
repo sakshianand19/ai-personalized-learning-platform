@@ -13,10 +13,35 @@ class ORMModel(BaseModel):
 # --- Students & topics -------------------------------------------------------
 
 
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+Role = Literal["admin", "teacher"]
+
+
+class StaffCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=255)
+    role: Role
+    subject: str = Field(default="", max_length=80)
+
+
+class StaffRead(ORMModel, StaffCreate):
+    id: int
+    created_at: datetime
+
+
 class StudentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=255)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=255)
     grade_level: int = Field(ge=1, le=12)
+    teacher_id: int | None = None
+
+
+class StudentUpdate(BaseModel):
+    """Partial update; send ``teacher_id: null`` to unassign a student from their teacher."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    grade_level: int | None = Field(default=None, ge=1, le=12)
+    teacher_id: int | None = None
 
 
 class StudentRead(ORMModel, StudentCreate):
@@ -240,6 +265,80 @@ class GapReport(BaseModel):
     overall_mastery: float | None
     gaps: list[LearningGapRead]
     progress: list[TopicProgress]
+
+
+class StudentTopicMastery(BaseModel):
+    topic_id: int
+    mastery: float | None
+    status: TopicStatus
+
+
+class ClassStudent(BaseModel):
+    id: int
+    name: str
+    email: str
+    grade_level: int
+    overall_mastery: float | None
+    gap_topics: list[str]
+    submissions: int
+    last_active: datetime | None
+    topics: list[StudentTopicMastery]
+
+
+class ClassTopic(BaseModel):
+    topic_id: int
+    topic_name: str
+    subject: str
+    average_mastery: float | None
+    assessed_students: int
+    students_with_gap: int
+
+
+class ClassReport(BaseModel):
+    teacher_id: int | None
+    student_count: int
+    average_mastery: float | None
+    students_with_gaps: int
+    submissions: int
+    topics: list[ClassTopic]
+    students: list[ClassStudent]
+
+
+class PlatformCounts(BaseModel):
+    students: int
+    teachers: int
+    admins: int
+    topics: int
+    content: int
+    questions: int
+    validated_questions: int
+    assessments: int
+    homework: int
+    submissions: int
+
+
+class TopicInventory(BaseModel):
+    topic_id: int
+    topic_name: str
+    subject: str
+    content_count: int
+    question_count: int
+
+
+class ActivityItem(BaseModel):
+    submission_id: int
+    student_id: int
+    student_name: str
+    kind: Literal["assessment", "homework"]
+    score: float
+    submitted_at: datetime
+
+
+class PlatformReport(BaseModel):
+    counts: PlatformCounts
+    average_score: float | None
+    topics: list[TopicInventory]
+    recent_activity: list[ActivityItem]
 
 
 class LearningPathStep(BaseModel):

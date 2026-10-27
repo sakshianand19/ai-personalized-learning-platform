@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,7 +14,14 @@ def _make_engine(url: str):
         if url in ("sqlite://", "sqlite:///:memory:"):
             # Share one in-memory database across connections (used by the test suite).
             kwargs["poolclass"] = StaticPool
-        return create_engine(url, **kwargs)
+        sqlite_engine = create_engine(url, **kwargs)
+
+        @event.listens_for(sqlite_engine, "connect")
+        def _enable_foreign_keys(dbapi_connection, _record):
+            # SQLite ignores ON DELETE CASCADE / SET NULL unless this is switched on.
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+        return sqlite_engine
     return create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=5)
 
 

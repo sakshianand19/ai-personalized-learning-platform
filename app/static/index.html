@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=2">
+  <link rel="stylesheet" href="/static/styles.css?v=3">
   <script>
     try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
@@ -25,6 +25,7 @@
       </a>
       <nav class="nav" id="nav"></nav>
       <div class="sidebar-foot">
+        <div class="role-note" id="role-note"></div>
         <div class="engine" id="engine" title="AI engine powering content analysis and question review">
           <span class="dot"></span><span id="engine-label">Checking AI engine…</span>
         </div>
@@ -36,13 +37,11 @@
       <header class="topbar">
         <div class="topbar-title" id="page-title">Dashboard</div>
         <div class="topbar-actions">
+          <div class="role-switch" id="role-switch" role="tablist" aria-label="View as"></div>
           <label class="student-picker">
             <span class="avatar" id="avatar">?</span>
-            <select id="student-select" aria-label="Current student"></select>
+            <select id="person-select" aria-label="Current user"></select>
           </label>
-          <button class="btn ghost icon-only" id="new-student" title="Add student" aria-label="Add student">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
           <button class="btn ghost icon-only" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
             <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           </button>
@@ -60,6 +59,6 @@
   </div>
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="/static/app.js?v=2"></script>
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

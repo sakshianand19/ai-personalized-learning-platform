@@ -61,6 +61,13 @@ const ICONS = {
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  users: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>',
+  class: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>',
+  assign: '<svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>',
+  admin: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>',
+  topics: '<svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
+  eye: '<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
 };
 
 const STATUS = {
@@ -70,18 +77,42 @@ const STATUS = {
   mastered: { label: "Mastered", cls: "good" },
 };
 
-const NAV = [
-  ["dashboard", "Dashboard"],
-  ["practice", "Practice"],
-  ["homework", "Homework"],
-  ["path", "Learning Path"],
-  ["studio", "Content Studio"],
-  ["validator", "Validator"],
-];
+const ROLES = {
+  student: {
+    label: "Student",
+    nav: [["dashboard", "Dashboard"], ["practice", "Practice"], ["homework", "Homework"], ["path", "Learning Path"]],
+    note: "Practise, take quizzes and follow your learning path.",
+  },
+  teacher: {
+    label: "Teacher",
+    nav: [["class", "My Class"], ["assign", "Assign Homework"], ["studio", "Content Studio"], ["validator", "Validator"]],
+    hidden: { student: "Student Insights" },
+    note: "Track your class, spot gaps and assign work.",
+  },
+  admin: {
+    label: "Admin",
+    nav: [["admin", "Overview"], ["users", "Users"], ["topics", "Topics"], ["studio", "Content Studio"], ["validator", "Validator"]],
+    hidden: { student: "Student Insights" },
+    note: "Manage users, classes and the curriculum.",
+  },
+};
 
-const state = { students: [], studentId: null, topics: [], quiz: null, keyHandler: null };
-const student = () => state.students.find((s) => s.id === state.studentId);
+const state = {
+  role: "student",
+  personId: null,
+  people: { student: [], teacher: [], admin: [] },
+  topics: [],
+  quiz: null,
+  keyHandler: null,
+};
+const person = () => state.people[state.role].find((p) => p.id === state.personId);
+const student = () => (state.role === "student" ? person() : null);
+const studentById = (id) => state.people.student.find((s) => s.id === id);
+const teacherName = (id) => state.people.teacher.find((t) => t.id === id)?.name ?? "Unassigned";
 const topicName = (id) => state.topics.find((t) => t.id === id)?.name ?? `Topic ${id}`;
+const initials = (name) => name.replace(/^(Ms|Mr|Mrs|Dr)\.?\s+/, "").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+// Student views read this; it's always the selected student in the student role.
+Object.defineProperty(state, "studentId", { get: () => (state.role === "student" ? state.personId : null) });
 
 function setView(html, { animate = true } = {}) {
   const el = $("#view");
@@ -160,16 +191,20 @@ function relativeTime(iso) {
 
 /* ===================== Shell ===================== */
 
-function renderNav() {
-  $("#nav").innerHTML = NAV.map(([id, label]) => `<a href="#${id}" data-view="${id}">${ICONS[id]}<span>${label}</span></a>`).join("");
-}
-
-function renderStudentPicker() {
-  $("#student-select").innerHTML = state.students
-    .map((s) => `<option value="${s.id}" ${s.id === state.studentId ? "selected" : ""}>${esc(s.name)}</option>`)
+function renderShell() {
+  const role = ROLES[state.role];
+  $("#nav").innerHTML = role.nav.map(([id, label]) => `<a href="#${id}" data-view="${id}">${ICONS[id]}<span>${label}</span></a>`).join("");
+  $("#role-switch").innerHTML = Object.entries(ROLES)
+    .map(([id, r]) => `<button role="tab" aria-selected="${id === state.role}" class="${id === state.role ? "on" : ""}" data-role="${id}">${r.label}</button>`)
     .join("");
-  const s = student();
-  $("#avatar").textContent = s ? s.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() : "?";
+  $("#role-note").innerHTML = `<span class="pill accent">${role.label} view</span><span>${role.note}</span>`;
+  const people = state.people[state.role];
+  $("#person-select").innerHTML = people.length
+    ? people.map((p) => `<option value="${p.id}" ${p.id === state.personId ? "selected" : ""}>${esc(p.name)}</option>`).join("")
+    : `<option>No ${role.label.toLowerCase()}s</option>`;
+  const p = person();
+  $("#avatar").textContent = p ? initials(p.name) : "?";
+  $("#avatar").dataset.role = state.role;
 }
 
 function setTheme(theme) {
@@ -193,67 +228,79 @@ async function loadEngine() {
   }
 }
 
-async function loadStudents() {
-  state.students = await api("/students?limit=200");
-  const saved = Number(store.get("studentId"));
-  state.studentId = state.students.some((s) => s.id === saved) ? saved : state.students[0]?.id ?? null;
-  renderStudentPicker();
+async function loadPeople() {
+  const [students, staff] = await Promise.all([api("/students?limit=200"), api("/staff")]);
+  state.people = { student: students, teacher: staff.filter((s) => s.role === "teacher"), admin: staff.filter((s) => s.role === "admin") };
+  pickPerson(Number(store.get(`person:${state.role}`)));
 }
 
-function newStudentModal() {
-  openModal(`
-    <h2>Add a student</h2>
-    <p class="muted" style="margin-bottom:20px">Each student gets their own mastery profile, gaps and learning path.</p>
-    <form id="student-form" class="stack">
-      <div class="field"><label for="s-name">Full name</label><input class="input" id="s-name" required maxlength="120" placeholder="e.g. Aarav Sharma"></div>
-      <div class="field"><label for="s-email">Email</label><input class="input" id="s-email" type="email" required placeholder="aarav@school.edu"></div>
-      <div class="field"><label for="s-grade">Grade</label>
-        <select class="input" id="s-grade">${Array.from({ length: 12 }, (_, i) => `<option ${i === 6 ? "selected" : ""}>${i + 1}</option>`).join("")}</select></div>
-      <button class="btn gradient lg" data-busy="Creating…">Create student</button>
-    </form>`);
-  $("#student-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    withBusy(e.submitter || $("#student-form button"), async () => {
-      const created = await api("/students", {
-        method: "POST",
-        body: { name: $("#s-name").value.trim(), email: $("#s-email").value.trim(), grade_level: Number($("#s-grade").value) },
-      });
-      state.students.push(created);
-      selectStudent(created.id);
-      closeModal();
-      toast(`Welcome, ${created.name}!`, "success");
-    });
-  });
+function pickPerson(preferredId) {
+  const people = state.people[state.role];
+  state.personId = people.some((p) => p.id === preferredId) ? preferredId : people[0]?.id ?? null;
+  if (state.personId != null) store.set(`person:${state.role}`, String(state.personId));
+  renderShell();
 }
 
-function selectStudent(id) {
-  state.studentId = id;
-  store.set("studentId", String(id));
-  renderStudentPicker();
+function selectRole(role, personId) {
+  state.role = role;
+  store.set("role", role);
+  pickPerson(personId ?? Number(store.get(`person:${role}`)));
+  const target = `#${ROLES[role].nav[0][0]}`;
+  if (location.hash === target) route();
+  else location.hash = target;
+}
+
+function selectPerson(id) {
+  pickPerson(id);
   route();
+}
+
+// Lets a teacher or admin see exactly what a student sees.
+function viewAsStudent(id) {
+  selectRole("student", id);
 }
 
 /* ===================== Router ===================== */
 
-const VIEWS = { dashboard, practice, homework, path: learningPath, studio, validator };
+const VIEWS = {
+  dashboard, practice, homework, path: learningPath, studio, validator,
+  class: classView, assign: assignView, student: studentInsights,
+  admin: adminView, users: usersView, topics: topicsView,
+};
 
 function route() {
   stopQuizKeys();
-  const name = location.hash.slice(1).split("/")[0] || "dashboard";
-  const view = VIEWS[name] ? name : "dashboard";
-  $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.view === view));
-  $("#page-title").textContent = NAV.find(([id]) => id === view)[1];
-  if (!state.studentId && ["dashboard", "practice", "homework", "path"].includes(view)) {
-    setView(emptyState("dashboard", "No students yet", "Add a student to start tracking their learning.", `<button class="btn" onclick="newStudentModal()">Add student</button>`));
+  closeModal();
+  const [name, arg] = location.hash.slice(1).split("/");
+  const role = ROLES[state.role];
+  const allowed = new Map([...role.nav, ...Object.entries(role.hidden || {})]);
+  if (!allowed.has(name)) {
+    location.replace(`#${role.nav[0][0]}`);
+    if (!name) route(); // replace() on an empty hash doesn't fire hashchange
     return;
   }
-  VIEWS[view]().catch(handleViewError);
+  $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name || (name === "student" && a.dataset.view === role.nav[0][0])));
+  $("#page-title").textContent = allowed.get(name);
+  if (state.personId == null) {
+    const msg = state.role === "student" ? "No students yet" : `No ${role.label.toLowerCase()}s yet`;
+    setView(emptyState("users", msg, "Switch to the Admin view to add people.", `<button class="btn" onclick="selectRole('admin')">Go to Admin</button>`));
+    return;
+  }
+  VIEWS[name](arg).catch(handleViewError);
 }
 
+let recovering = false;
+
 function handleViewError(err) {
-  if (err.status === 404 && /Student/.test(err.message)) {
-    // Serverless storage can reset; fall back to an existing student.
-    loadStudents().then(route);
+  if (err.status === 404 && /Student|Staff/.test(err.message) && !recovering) {
+    // Serverless storage can reset; reload people and fall back to someone who exists.
+    recovering = true;
+    loadPeople()
+      .then(() => {
+        if (location.hash.startsWith("#student/")) location.hash = `#${ROLES[state.role].nav[0][0]}`;
+        else route();
+      })
+      .finally(() => setTimeout(() => (recovering = false), 500));
     return;
   }
   setView(emptyState("alert", "Something went wrong", err.message, `<button class="btn ghost" onclick="route()">Try again</button>`));
@@ -299,7 +346,7 @@ async function dashboard() {
       <div class="stack" style="gap:20px">
         <div class="card">
           <div class="card-head"><h3>Focus areas</h3>${report.gaps.length ? `<span class="pill bad">${report.gaps.length} gap${report.gaps.length > 1 ? "s" : ""}</span>` : ""}</div>
-          <div class="stack">${report.gaps.length ? report.gaps.map(gapCard).join("") : emptyState("target", history.length ? "No gaps detected" : "Not assessed yet", history.length ? "Great work! Keep practising to reach mastery." : "Take the diagnostic to discover your gaps.")}</div>
+          <div class="stack">${report.gaps.length ? report.gaps.map((g) => gapCard(g)).join("") : emptyState("target", history.length ? "No gaps detected" : "Not assessed yet", history.length ? "Great work! Keep practising to reach mastery." : "Take the diagnostic to discover your gaps.")}</div>
         </div>
         <div class="card">
           <div class="card-head"><h3>Recent activity</h3></div>
@@ -331,14 +378,36 @@ function masteryRow(p) {
     </div>`;
 }
 
-function gapCard(g) {
+// Students get a "practise now" button; teachers and admins assign homework instead.
+function gapCard(g, assignTo = null) {
+  const button = assignTo
+    ? `<button class="btn sm" data-assign-topic="${g.topic_id}" data-assign-student="${assignTo}" data-busy="Assigning…">${ICONS.assign} Assign homework</button>`
+    : `<button class="btn sm" data-practice-topic="${g.topic_id}" data-busy="Preparing…">${ICONS.practice} Practise this topic</button>`;
   return `
     <div class="gap-card ${g.severity}">
       <div class="row"><h4>${esc(g.topic_name)}</h4><span class="spacer"></span><span class="pill ${g.severity === "high" ? "bad" : "warn"}">${g.severity} priority</span></div>
       <p class="small muted">${esc(g.reason)}</p>
       <p class="action">💡 ${esc(g.recommended_action)}</p>
-      <div><button class="btn sm" data-practice-topic="${g.topic_id}" data-busy="Preparing…">${ICONS.practice} Practise this topic</button></div>
+      <div>${button}</div>
     </div>`;
+}
+
+async function assignHomework(studentId, topicId = null, numQuestions = 5, dueInDays = 7) {
+  return api("/homework/generate", {
+    method: "POST",
+    body: { student_id: studentId, topic_id: topicId, num_questions: numQuestions, due_in_days: dueInDays },
+  });
+}
+
+function bindAssignButtons(root) {
+  $$("[data-assign-topic]", root).forEach((btn) =>
+    btn.addEventListener("click", () =>
+      withBusy(btn, async () => {
+        const hw = await assignHomework(Number(btn.dataset.assignStudent), Number(btn.dataset.assignTopic) || null);
+        toast(`Assigned "${hw.title}" to ${studentById(hw.student_id)?.name ?? "student"}`, "success");
+      }),
+    ),
+  );
 }
 
 function activityRow(s) {
@@ -879,14 +948,437 @@ function renderValidation(r) {
     </div>`;
 }
 
+/* ===================== Shared people helpers ===================== */
+
+function avatar(name, size = 34) {
+  return `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size / 2.6)}px">${esc(initials(name))}</span>`;
+}
+
+function masteryTone(m) {
+  return m == null ? "neutral" : m >= 0.85 ? "good" : m >= 0.6 ? "warn" : "bad";
+}
+
+function lastActive(iso) {
+  return iso ? relativeTime(iso) : "Never";
+}
+
+/* ===================== Teacher: class overview ===================== */
+
+async function classView() {
+  setView(loading(3));
+  const teacher = person();
+  const report = await api(`/reports/class?teacher_id=${teacher.id}`);
+  const attention = report.students
+    .filter((s) => s.gap_topics.length || s.overall_mastery == null)
+    .sort((a, b) => b.gap_topics.length - a.gap_topics.length || (a.overall_mastery ?? 2) - (b.overall_mastery ?? 2))
+    .slice(0, 5);
+
+  const el = setView(`
+    <div class="page-head">
+      <div><h1>${esc(teacher.name)}'s class</h1><p>${teacher.subject ? `${esc(teacher.subject)} · ` : ""}${report.student_count} students. Mastery and gaps update as soon as students submit quizzes and homework.</p></div>
+      <a class="btn gradient" href="#assign">${ICONS.assign} Assign homework</a>
+    </div>
+    <section class="grid cols-4" style="margin-bottom:20px">
+      ${statCard("accent", "users", report.student_count, "Students")}
+      ${statCard("good", "chart", pct(report.average_mastery), "Class mastery")}
+      ${statCard("bad", "alert", report.students_with_gaps, "Students with gaps")}
+      ${statCard("warn", "practice", report.submissions, "Quizzes & homework done")}
+    </section>
+    <section class="grid split" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-head"><h3>Topic performance</h3><span class="muted small">Class average</span></div>
+        <div class="mastery-list">${report.topics.map((t) => `
+          <div class="mastery-item">
+            <div class="top">
+              <div><div class="name">${esc(t.topic_name)}</div><div class="sub">${esc(t.subject)} · ${t.assessed_students} assessed</div></div>
+              <div class="row" style="gap:8px">${t.students_with_gap ? `<span class="pill bad">${t.students_with_gap} with gap</span>` : ""}<strong>${pct(t.average_mastery)}</strong></div>
+            </div>
+            <div class="bar ${masteryTone(t.average_mastery)}"><i data-w="${Math.round((t.average_mastery ?? 0) * 100)}%"></i><span class="target" style="left:60%"></span></div>
+          </div>`).join("")}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Needs attention</h3>${attention.length ? `<span class="pill bad">${attention.length}</span>` : ""}</div>
+        <div class="list">${attention.map((s) => `
+          <div class="list-item">
+            ${avatar(s.name)}
+            <div style="flex:1;min-width:0"><a href="#student/${s.id}" style="font-weight:600;color:var(--text)">${esc(s.name)}</a>
+              <div class="small muted">${s.gap_topics.length ? `Gaps: ${s.gap_topics.map(esc).join(", ")}` : "Hasn't taken a quiz yet"}</div></div>
+            <button class="btn sm soft" data-assign-topic="" data-assign-student="${s.id}" data-busy="…" title="Assign homework on their weakest topic">${ICONS.assign}</button>
+          </div>`).join("") || emptyState("trophy", "Everyone is on track", "No student currently has a learning gap.")}
+        </div>
+      </div>
+    </section>
+    <div class="card">
+      <div class="card-head"><h3>Mastery heatmap</h3><span class="muted small">Click a student for details</span></div>
+      <div class="table-wrap">
+        <table class="table heatmap">
+          <thead><tr><th>Student</th>${report.topics.map((t) => `<th>${esc(t.topic_name)}</th>`).join("")}<th>Overall</th><th>Last active</th></tr></thead>
+          <tbody>${report.students.map((s) => `
+            <tr data-href="#student/${s.id}">
+              <td><div class="row" style="flex-wrap:nowrap">${avatar(s.name, 30)}<span style="font-weight:600">${esc(s.name)}</span></div></td>
+              ${s.topics.map((t) => `<td><span class="heat ${STATUS[t.status].cls}" title="${STATUS[t.status].label}">${pct(t.mastery)}</span></td>`).join("")}
+              <td><strong class="score-badge ${masteryTone(s.overall_mastery)}">${pct(s.overall_mastery)}</strong></td>
+              <td class="muted small">${lastActive(s.last_active)}</td>
+            </tr>`).join("") || `<tr><td colspan="${report.topics.length + 3}" class="muted">No students in this class yet. An admin can assign students from the Users page.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <div class="row legend">${Object.values(STATUS).map((s) => `<span class="row" style="gap:6px"><span class="heat ${s.cls} dot"></span>${s.label}</span>`).join("")}</div>
+    </div>`);
+
+  $$("tr[data-href]", el).forEach((tr) => tr.addEventListener("click", () => (location.hash = tr.dataset.href)));
+  bindAssignButtons(el);
+  animateBars(el);
+}
+
+/* ===================== Teacher/Admin: student insights ===================== */
+
+async function studentInsights(id) {
+  setView(loading(3));
+  const sid = Number(id);
+  const [s, report, history] = await Promise.all([
+    api(`/students/${sid}`),
+    api(`/students/${sid}/learning-gaps`),
+    api(`/students/${sid}/submissions?limit=8`),
+  ]);
+  const back = state.role === "teacher" ? ["#class", "My class"] : ["#users", "Users"];
+  const lastSeen = history[0]?.submitted_at;
+
+  const el = setView(`
+    <a class="back-link" href="${back[0]}">${ICONS.arrowL} ${back[1]}</a>
+    <div class="profile-head card">
+      ${avatar(s.name, 64)}
+      <div style="flex:1;min-width:200px">
+        <h1 style="font-size:24px">${esc(s.name)}</h1>
+        <div class="muted small">${esc(s.email)} · Grade ${s.grade_level} · Teacher: ${esc(teacherName(s.teacher_id))}</div>
+      </div>
+      <div class="row">
+        <button class="btn ghost" id="view-as">${ICONS.eye} View as student</button>
+        <button class="btn gradient" data-assign-topic="" data-assign-student="${s.id}" data-busy="Assigning…">${ICONS.assign} Assign homework</button>
+      </div>
+    </div>
+    <section class="grid cols-4" style="margin:20px 0">
+      ${statCard("accent", "chart", pct(report.overall_mastery), "Overall mastery")}
+      ${statCard("bad", "alert", report.gaps.length, "Learning gaps")}
+      ${statCard("warn", "practice", report.progress.reduce((n, p) => n + p.attempts, 0), "Questions answered")}
+      ${statCard("good", "clock", lastActive(lastSeen), "Last active")}
+    </section>
+    <section class="grid split">
+      <div class="card">
+        <div class="card-head"><h3>Topic mastery</h3><span class="muted small">Target 60%</span></div>
+        <div class="mastery-list">${report.progress.map(masteryRow).join("")}</div>
+      </div>
+      <div class="stack" style="gap:20px">
+        <div class="card">
+          <div class="card-head"><h3>Learning gaps</h3></div>
+          <div class="stack">${report.gaps.map((g) => gapCard(g, s.id)).join("") || emptyState("target", history.length ? "No gaps" : "Not assessed yet", history.length ? "This student is on track." : "They haven't taken a quiz yet.")}</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Recent activity</h3></div>
+          <div class="list">${history.map(activityRow).join("") || '<p class="muted small">No submissions yet.</p>'}</div>
+        </div>
+      </div>
+    </section>`);
+
+  $("#view-as", el).addEventListener("click", () => viewAsStudent(s.id));
+  bindAssignButtons(el);
+  animateBars(el);
+}
+
+/* ===================== Teacher: assign homework ===================== */
+
+async function assignView() {
+  setView(loading(2));
+  const teacher = person();
+  const [roster, topics] = await Promise.all([api(`/students?teacher_id=${teacher.id}&limit=200`), api("/topics")]);
+  state.topics = topics;
+
+  const el = setView(`
+    <div class="page-head"><div><h1>Assign homework</h1><p>Send adaptive homework to several students at once. "Weakest topic" picks each student's most urgent topic individually.</p></div></div>
+    <div class="grid split" style="align-items:start">
+      <div class="card">
+        <div class="stack" style="gap:20px">
+          <div>
+            <div class="row" style="margin-bottom:12px"><span class="label">Students</span><span class="spacer"></span><button class="btn sm ghost" id="toggle-all">Select none</button></div>
+            <div class="row" id="student-chips">${roster.map((s) => `<button class="chip on" data-student="${s.id}"><span class="check">${ICONS.check}</span>${esc(s.name)}</button>`).join("") || '<p class="muted">No students in your class yet.</p>'}</div>
+          </div>
+          <div class="grid cols-2" style="gap:14px">
+            <div class="field"><label for="as-topic">Topic</label>
+              <select class="input" id="as-topic"><option value="">✨ Each student's weakest topic</option>${topics.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+            <div class="field"><label for="as-due">Due in</label>
+              <select class="input" id="as-due"><option value="3">3 days</option><option value="7" selected>1 week</option><option value="14">2 weeks</option></select></div>
+          </div>
+          <div class="field"><label for="as-n">Questions per student: <b id="as-n-val">5</b></label><input type="range" id="as-n" min="1" max="10" value="5"></div>
+          <div class="row"><span class="muted small" id="as-summary"></span><span class="spacer"></span>
+            <button class="btn gradient lg" id="as-go" data-busy="Assigning…">${ICONS.assign} Assign</button></div>
+        </div>
+      </div>
+      <div id="as-result">${emptyState("assign", "Nothing assigned yet", "Results for each student will appear here.")}</div>
+    </div>`);
+
+  const selected = () => $$(".chip.on", el).map((c) => Number(c.dataset.student));
+  const summary = () => {
+    $("#as-n-val").textContent = $("#as-n").value;
+    $("#as-summary").textContent = `${selected().length} student${selected().length === 1 ? "" : "s"} selected`;
+    $("#as-go").disabled = !selected().length;
+    $("#toggle-all").textContent = selected().length ? "Select none" : "Select all";
+  };
+  $$(".chip", el).forEach((c) => c.addEventListener("click", () => { c.classList.toggle("on"); summary(); }));
+  $("#toggle-all").addEventListener("click", () => {
+    const on = !selected().length;
+    $$(".chip", el).forEach((c) => c.classList.toggle("on", on));
+    summary();
+  });
+  $("#as-n").addEventListener("input", summary);
+  $("#as-go").addEventListener("click", (e) =>
+    withBusy(e.currentTarget, async () => {
+      const topicId = Number($("#as-topic").value) || null;
+      const ids = selected();
+      const results = await Promise.allSettled(
+        ids.map((sid) => assignHomework(sid, topicId, Number($("#as-n").value), Number($("#as-due").value))),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      $("#as-result").innerHTML = `
+        <div class="card">
+          <div class="card-head"><h3>Assigned</h3><span class="pill good">${ok} of ${ids.length}</span></div>
+          <div class="list">${results.map((r, i) => {
+            const name = esc(studentById(ids[i])?.name ?? `Student ${ids[i]}`);
+            return r.status === "fulfilled"
+              ? `<div class="list-item"><div class="list-icon" style="color:var(--good)">${ICONS.check}</div><div><div style="font-weight:600">${name}</div><div class="small muted">${esc(r.value.title)} · ${r.value.questions.length} questions · due ${toDate(r.value.due_at).toLocaleDateString()}</div></div></div>`
+              : `<div class="list-item"><div class="list-icon" style="color:var(--bad)">${ICONS.x}</div><div><div style="font-weight:600">${name}</div><div class="small" style="color:var(--bad)">${esc(r.reason.message)}</div></div></div>`;
+          }).join("")}</div>
+        </div>`;
+      toast(`Homework assigned to ${ok} student${ok === 1 ? "" : "s"}`, ok ? "success" : "error");
+    }),
+  );
+  summary();
+}
+
+/* ===================== Admin: overview ===================== */
+
+async function adminView() {
+  setView(loading(3));
+  const [report] = await Promise.all([api("/reports/platform"), loadPeople()]);
+  const c = report.counts;
+  const unassigned = state.people.student.filter((s) => s.teacher_id == null).length;
+
+  const el = setView(`
+    <div class="page-head">
+      <div><h1>Platform overview</h1><p>Everything happening across LearnPath AI: people, classes, curriculum and student activity.</p></div>
+      <a class="btn gradient" href="#users">${ICONS.users} Manage users</a>
+    </div>
+    <section class="grid cols-4" style="margin-bottom:20px">
+      ${statCard("accent", "users", c.students, `Students · ${c.teachers} teachers`)}
+      ${statCard("good", "validator", c.validated_questions, `Validated questions of ${c.questions}`)}
+      ${statCard("warn", "practice", c.submissions, `Submissions · ${c.homework} homework`)}
+      ${statCard("bad", "chart", report.average_score == null ? "—" : `${Math.round(report.average_score)}%`, "Average score")}
+    </section>
+    <section class="grid split" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-head"><h3>Classes</h3>${unassigned ? `<span class="pill warn">${unassigned} unassigned</span>` : ""}</div>
+        <div class="list">${state.people.teacher.map((t) => {
+          const n = state.people.student.filter((s) => s.teacher_id === t.id).length;
+          return `
+            <div class="list-item">${avatar(t.name)}
+              <div style="flex:1"><div style="font-weight:600">${esc(t.name)}</div><div class="small muted">${esc(t.subject || "Teacher")} · ${n} student${n === 1 ? "" : "s"}</div></div>
+              <button class="btn sm soft" data-open-class="${t.id}">${ICONS.eye} Open class</button>
+            </div>`;
+        }).join("") || '<p class="muted small">No teachers yet.</p>'}</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Recent activity</h3></div>
+        <div class="list">${report.recent_activity.map((a) => `
+          <div class="list-item">
+            <div class="list-icon">${ICONS[a.kind === "homework" ? "homework" : "practice"]}</div>
+            <div style="flex:1"><a href="#student/${a.student_id}" style="font-weight:600;color:var(--text)">${esc(a.student_name)}</a>
+              <div class="small muted">${a.kind === "homework" ? "Homework" : "Assessment"} · ${relativeTime(a.submitted_at)}</div></div>
+            <span class="score-badge ${scoreClass(a.score)}">${Math.round(a.score)}%</span>
+          </div>`).join("") || '<p class="muted small">No submissions yet.</p>'}</div>
+      </div>
+    </section>
+    <div class="card">
+      <div class="card-head"><h3>Curriculum inventory</h3><a class="btn sm ghost" href="#topics">Manage topics</a></div>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Topic</th><th>Subject</th><th>Materials</th><th>Validated questions</th></tr></thead>
+        <tbody>${report.topics.map((t) => `<tr><td style="font-weight:600">${esc(t.topic_name)}</td><td>${esc(t.subject)}</td><td>${t.content_count}</td>
+          <td>${t.question_count ? t.question_count : '<span class="pill warn">None yet</span>'}</td></tr>`).join("")}</tbody>
+      </table></div>
+    </div>`);
+  $$("[data-open-class]", el).forEach((b) => b.addEventListener("click", () => selectRole("teacher", Number(b.dataset.openClass))));
+}
+
+/* ===================== Admin: users ===================== */
+
+const USER_TABS = { students: "student", teachers: "teacher", admins: "admin" };
+
+async function usersView(tab = "students") {
+  if (!USER_TABS[tab]) tab = "students";
+  setView(loading(2));
+  await loadPeople();
+  const rows = state.people[USER_TABS[tab]];
+  const teacherOptions = (selected) =>
+    `<option value="">Unassigned</option>${state.people.teacher.map((t) => `<option value="${t.id}" ${t.id === selected ? "selected" : ""}>${esc(t.name)}</option>`).join("")}`;
+
+  const table = {
+    students: () => `
+      <thead><tr><th>Name</th><th>Email</th><th>Grade</th><th>Teacher</th><th></th></tr></thead>
+      <tbody>${rows.map((s) => `
+        <tr>
+          <td><div class="row" style="flex-wrap:nowrap">${avatar(s.name, 30)}<a href="#student/${s.id}" style="font-weight:600;color:var(--text)">${esc(s.name)}</a></div></td>
+          <td class="muted">${esc(s.email)}</td><td>${s.grade_level}</td>
+          <td><select class="input compact" data-teacher-for="${s.id}">${teacherOptions(s.teacher_id)}</select></td>
+          <td class="actions"><button class="btn sm ghost" data-view-as="${s.id}" title="View as this student">${ICONS.eye}</button>
+            <button class="btn sm ghost danger" data-delete="students/${s.id}" data-name="${esc(s.name)}" title="Delete">${ICONS.trash}</button></td>
+        </tr>`).join("")}</tbody>`,
+    teachers: () => `
+      <thead><tr><th>Name</th><th>Email</th><th>Subject</th><th>Students</th><th></th></tr></thead>
+      <tbody>${rows.map((t) => `
+        <tr>
+          <td><div class="row" style="flex-wrap:nowrap">${avatar(t.name, 30)}<span style="font-weight:600">${esc(t.name)}</span></div></td>
+          <td class="muted">${esc(t.email)}</td><td>${esc(t.subject || "—")}</td>
+          <td>${state.people.student.filter((s) => s.teacher_id === t.id).length}</td>
+          <td class="actions"><button class="btn sm ghost" data-open-class="${t.id}" title="Open class view">${ICONS.eye}</button>
+            <button class="btn sm ghost danger" data-delete="staff/${t.id}" data-name="${esc(t.name)}" title="Delete">${ICONS.trash}</button></td>
+        </tr>`).join("")}</tbody>`,
+    admins: () => `
+      <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+      <tbody>${rows.map((a) => `
+        <tr>
+          <td><div class="row" style="flex-wrap:nowrap">${avatar(a.name, 30)}<span style="font-weight:600">${esc(a.name)}</span></div></td>
+          <td class="muted">${esc(a.email)}</td>
+          <td class="actions"><button class="btn sm ghost danger" data-delete="staff/${a.id}" data-name="${esc(a.name)}" title="Delete">${ICONS.trash}</button></td>
+        </tr>`).join("")}</tbody>`,
+  }[tab];
+
+  const el = setView(`
+    <div class="page-head">
+      <div><h1>Users</h1><p>Add people, assign students to teachers, and remove accounts.</p></div>
+      <button class="btn gradient" id="add-user">${ICONS.plus} Add user</button>
+    </div>
+    <div class="tabs">${Object.entries(USER_TABS).map(([id, role]) => `<a href="#users/${id}" class="${id === tab ? "on" : ""}">${id[0].toUpperCase() + id.slice(1)} <span class="count">${state.people[role].length}</span></a>`).join("")}</div>
+    <div class="card" style="padding:8px 8px 4px">
+      <div class="table-wrap"><table class="table">${table()}</table></div>
+      ${rows.length ? "" : emptyState("users", `No ${tab} yet`, "Use “Add user” to create one.")}
+    </div>`);
+
+  $("#add-user").addEventListener("click", () => addUserModal(USER_TABS[tab]));
+  $$("[data-teacher-for]", el).forEach((sel) =>
+    sel.addEventListener("change", async () => {
+      try {
+        await api(`/students/${sel.dataset.teacherFor}`, { method: "PATCH", body: { teacher_id: Number(sel.value) || null } });
+        toast(sel.value ? `Moved to ${teacherName(Number(sel.value))}'s class` : "Student unassigned", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }),
+  );
+  $$("[data-view-as]", el).forEach((b) => b.addEventListener("click", () => viewAsStudent(Number(b.dataset.viewAs))));
+  $$("[data-open-class]", el).forEach((b) => b.addEventListener("click", () => selectRole("teacher", Number(b.dataset.openClass))));
+  $$("[data-delete]", el).forEach((b) =>
+    b.addEventListener("click", async () => {
+      const extra = b.dataset.delete.startsWith("students") ? " Their quiz history and homework will be deleted too." : "";
+      if (!confirm(`Delete ${b.dataset.name}?${extra}`)) return;
+      try {
+        await api(`/${b.dataset.delete}`, { method: "DELETE" });
+        toast(`${b.dataset.name} deleted`, "success");
+        usersView(tab).catch(handleViewError);
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }),
+  );
+}
+
+function addUserModal(defaultRole = "student") {
+  openModal(`
+    <h2>Add a user</h2>
+    <p class="muted" style="margin-bottom:20px">Students get a mastery profile and learning path. Teachers get a class view.</p>
+    <form id="user-form" class="stack">
+      <div class="field"><label for="u-role">Role</label>
+        <select class="input" id="u-role">${Object.entries(ROLES).map(([id, r]) => `<option value="${id}" ${id === defaultRole ? "selected" : ""}>${r.label}</option>`).join("")}</select></div>
+      <div class="field"><label for="u-name">Full name</label><input class="input" id="u-name" required maxlength="120" placeholder="e.g. Meera Iyer"></div>
+      <div class="field"><label for="u-email">Email</label><input class="input" id="u-email" type="email" required placeholder="meera@school.edu"></div>
+      <div class="grid cols-2" style="gap:12px" data-for="student">
+        <div class="field"><label for="u-grade">Grade</label>
+          <select class="input" id="u-grade">${Array.from({ length: 12 }, (_, i) => `<option ${i === 6 ? "selected" : ""}>${i + 1}</option>`).join("")}</select></div>
+        <div class="field"><label for="u-teacher">Teacher</label>
+          <select class="input" id="u-teacher"><option value="">Unassigned</option>${state.people.teacher.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+      </div>
+      <div class="field" data-for="teacher"><label for="u-subject">Subject</label><input class="input" id="u-subject" maxlength="80" placeholder="e.g. Mathematics"></div>
+      <button class="btn gradient lg" data-busy="Creating…">Create user</button>
+    </form>`);
+  const sync = () => $$("[data-for]").forEach((el) => el.classList.toggle("hidden", el.dataset.for !== $("#u-role").value));
+  $("#u-role").addEventListener("change", sync);
+  sync();
+  $("#user-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    withBusy(e.submitter, async () => {
+      const role = $("#u-role").value;
+      const base = { name: $("#u-name").value.trim(), email: $("#u-email").value.trim() };
+      const created = role === "student"
+        ? await api("/students", { method: "POST", body: { ...base, grade_level: Number($("#u-grade").value), teacher_id: Number($("#u-teacher").value) || null } })
+        : await api("/staff", { method: "POST", body: { ...base, role, subject: $("#u-subject").value.trim() } });
+      closeModal();
+      toast(`${created.name} added as ${ROLES[role].label.toLowerCase()}`, "success");
+      const tab = Object.keys(USER_TABS).find((k) => USER_TABS[k] === role);
+      if (location.hash === `#users/${tab}`) route();
+      else location.hash = `#users/${tab}`;
+    });
+  });
+}
+
+/* ===================== Admin: topics ===================== */
+
+async function topicsView() {
+  setView(loading(2));
+  const report = await api("/reports/platform");
+  const el = setView(`
+    <div class="page-head"><div><h1>Topics</h1><p>The curriculum every quiz, homework and learning path is built on. Add material and questions in the Content Studio.</p></div></div>
+    <div class="grid split" style="align-items:start">
+      <div class="card" style="padding:8px 8px 4px">
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Topic</th><th>Subject</th><th>Materials</th><th>Questions</th><th></th></tr></thead>
+          <tbody>${report.topics.map((t) => `
+            <tr><td style="font-weight:600">${esc(t.topic_name)}</td><td>${esc(t.subject)}</td><td>${t.content_count}</td>
+              <td>${t.question_count || '<span class="pill warn">0</span>'}</td>
+              <td class="actions"><a class="btn sm soft" href="#studio">${ICONS.studio} Add material</a></td></tr>`).join("")}
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>New topic</h3></div>
+        <form id="topic-form" class="stack" style="gap:14px">
+          <div class="field"><label for="tp-subject">Subject</label><input class="input" id="tp-subject" required maxlength="80" placeholder="e.g. Science"></div>
+          <div class="field"><label for="tp-name">Topic name</label><input class="input" id="tp-name" required maxlength="120" placeholder="e.g. The Water Cycle"></div>
+          <div class="field"><label for="tp-desc">Description</label><textarea class="input" id="tp-desc" rows="3" style="min-height:80px" placeholder="What students will learn"></textarea></div>
+          <button class="btn gradient" data-busy="Adding…">${ICONS.plus} Add topic</button>
+        </form>
+      </div>
+    </div>`);
+  $("#topic-form", el).addEventListener("submit", (e) => {
+    e.preventDefault();
+    withBusy(e.submitter, async () => {
+      const topic = await api("/topics", {
+        method: "POST",
+        body: { subject: $("#tp-subject").value.trim(), name: $("#tp-name").value.trim(), description: $("#tp-desc").value.trim() },
+      });
+      state.topics.push(topic);
+      toast(`Topic "${topic.name}" added`, "success");
+      topicsView().catch(handleViewError);
+    });
+  });
+}
+
 /* ===================== Boot ===================== */
 
 async function boot() {
-  renderNav();
+  state.role = ROLES[store.get("role")] ? store.get("role") : "student";
+  renderShell();
   setTheme(currentTheme());
   $("#theme-toggle").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
-  $("#new-student").addEventListener("click", newStudentModal);
-  $("#student-select").addEventListener("change", (e) => selectStudent(Number(e.target.value)));
+  $("#role-switch").addEventListener("click", (e) => e.target.dataset.role && selectRole(e.target.dataset.role));
+  $("#person-select").addEventListener("change", (e) => selectPerson(Number(e.target.value)));
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal").addEventListener("click", (e) => e.target.id === "modal" && closeModal());
   document.addEventListener("keydown", (e) => e.key === "Escape" && closeModal());
@@ -895,7 +1387,7 @@ async function boot() {
   setView(loading(3));
   loadEngine();
   try {
-    const [, topics] = await Promise.all([loadStudents(), api("/topics")]);
+    const [, topics] = await Promise.all([loadPeople(), api("/topics")]);
     state.topics = topics;
     route();
   } catch (err) {

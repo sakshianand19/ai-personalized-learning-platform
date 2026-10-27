@@ -38,6 +38,19 @@ homework_questions = Table(
 )
 
 
+class Staff(Base):
+    """Admins and teachers. Students are kept in their own table."""
+
+    __tablename__ = "staff"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    role: Mapped[str] = mapped_column(String(20), index=True)
+    subject: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Student(Base):
     __tablename__ = "students"
 
@@ -45,6 +58,9 @@ class Student(Base):
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     grade_level: Mapped[int]
+    teacher_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
