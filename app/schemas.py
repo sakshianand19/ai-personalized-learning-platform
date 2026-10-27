@@ -150,6 +150,16 @@ class ResponseRead(BaseModel):
     explanation: str
 
 
+class SubmissionSummary(ORMModel):
+    id: int
+    assessment_id: int | None
+    homework_id: int | None
+    correct: int
+    total: int
+    score: float
+    submitted_at: datetime
+
+
 class SubmissionRead(BaseModel):
     id: int
     student_id: int

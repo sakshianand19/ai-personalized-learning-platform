@@ -22,11 +22,25 @@ Without Azure OpenAI credentials every AI feature falls back to deterministic he
 API (and the live demo) works out of the box. If a model call fails or returns malformed output,
 the service logs it and falls back the same way.
 
+## Web app
+
+The API ships with a responsive single-page frontend (**LearnPath AI**) served at `/`. It's
+plain HTML/CSS/JS in `app/static/`, so there's no build step:
+
+- **Dashboard:** overall mastery, per-topic mastery bars, prioritised learning gaps with one-click practice, recent activity
+- **Practice:** pick topics and take a quiz (keyboard shortcuts A–D, ← →), then review every answer with explanations
+- **Homework:** assign adaptive homework (auto-targets the weakest topic) and complete it in the quiz player
+- **Learning path:** a timeline ordered by urgency with level-matched study material
+- **Content studio:** paste material for AI analysis (summary, concepts, difficulty) and generate validated questions
+- **Validator:** check a question against the rules and the LLM reviewer
+- Light/dark theme, multiple students, mobile bottom navigation
+
 ## Architecture
 
 ```
 app/
-├── main.py              FastAPI app, routers, landing page, /health
+├── main.py              FastAPI app, routers, static frontend, /health
+├── static/              Single-page web app (index.html, styles.css, app.js)
 ├── config.py            Settings from environment / .env (pydantic-settings)
 ├── database.py          SQLAlchemy engine/session, table creation, demo seeding
 ├── models.py            ORM models (students, topics, content, questions, assessments,

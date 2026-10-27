@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.database import get_db
-from app.models import Student
+from app.models import Student, Submission
 from app.routers.common import get_or_404
 from app.schemas import (
     ContentSummary,
@@ -14,6 +14,7 @@ from app.schemas import (
     LearningPathStep,
     StudentCreate,
     StudentRead,
+    SubmissionSummary,
     TopicProgress,
 )
 from app.services import gap_analyzer, personalization
@@ -39,6 +40,18 @@ def list_students(skip: int = 0, limit: int = 50, db: Session = Depends(get_db))
 @router.get("/{student_id}", response_model=StudentRead)
 def get_student(student_id: int, db: Session = Depends(get_db)):
     return get_or_404(db, Student, student_id)
+
+
+@router.get("/{student_id}/submissions", response_model=list[SubmissionSummary])
+def list_submissions(student_id: int, limit: int = 10, db: Session = Depends(get_db)):
+    """The student's most recent graded assessments and homework."""
+    get_or_404(db, Student, student_id)
+    return db.scalars(
+        select(Submission)
+        .where(Submission.student_id == student_id)
+        .order_by(Submission.id.desc())
+        .limit(min(limit, 50))
+    ).all()
 
 
 @router.get("/{student_id}/learning-gaps", response_model=GapReport)

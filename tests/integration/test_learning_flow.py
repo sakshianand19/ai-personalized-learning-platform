@@ -21,7 +21,8 @@ def _answer_key(client) -> dict[int, str]:
 
 def test_health_and_landing_page(client):
     assert client.get("/health").json()["llm_provider"] == "heuristic"
-    assert "Personalized Learning" in client.get("/").text
+    assert "LearnPath AI" in client.get("/").text
+    assert client.get("/static/app.js").status_code == 200
 
 
 def test_student_crud_and_duplicate_email(client):
@@ -92,6 +93,10 @@ def test_homework_targets_weakest_topic_and_cannot_be_resubmitted(client, seeded
     assert client.post(f"{API}/homework/{homework['id']}/submit", json={"answers": answers}).status_code == 409
     listed = client.get(f"{API}/homework", params={"student_id": 1, "status": "completed"}).json()
     assert [h["id"] for h in listed] == [homework["id"]]
+
+    history = client.get(f"{API}/students/1/submissions").json()
+    assert [s["homework_id"] for s in history] == [homework["id"], None]
+    assert history[0]["score"] == 100.0
 
 
 def test_submitting_foreign_question_is_rejected(client, seeded):
