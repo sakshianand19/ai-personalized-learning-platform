@@ -40,7 +40,6 @@ app/
     ├── grading.py             Grading and incremental mastery updates
     ├── gap_analyzer.py        Learning-gap identification
     └── personalization.py     Learning paths and adaptive homework selection
-api/index.py             Vercel serverless entrypoint
 tests/                   Unit + integration tests (LLM replaced by LangChain fake models)
 ```
 
@@ -122,7 +121,9 @@ every push.
 
 ## Deploying to Vercel
 
-The repo is ready for Vercel's Python runtime (`api/index.py` + `vercel.json`).
+Live demo: https://ai-personalized-learning-platform-nu.vercel.app (API docs at `/docs`).
+
+Vercel detects FastAPI automatically from `app/main.py`; no extra configuration is needed.
 
 1. Import the GitHub repo at [vercel.com/new](https://vercel.com/new) (no build settings needed).
 2. Optionally add the Azure OpenAI variables under **Settings → Environment Variables**.
