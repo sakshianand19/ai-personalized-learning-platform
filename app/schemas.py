@@ -64,9 +64,25 @@ class StudentRead(ORMModel, StudentBase):
 
 
 class LoginRequest(BaseModel):
+    """The account's role decides what the user can do; it isn't chosen at sign-in."""
+
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=128)
+
+
+class SignupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=255)
+    password: str = Password
     role: Literal["admin", "teacher", "student"]
+    grade_level: int | None = Field(default=None, ge=1, le=12, description="Required for students.")
+    subject: str = Field(default="", max_length=80, description="Optional, for teachers.")
+
+    @model_validator(mode="after")
+    def _student_needs_grade(self) -> "SignupRequest":
+        if self.role == "student" and self.grade_level is None:
+            raise ValueError("Students must choose a grade.")
+        return self
 
 
 class UserInfo(BaseModel):
@@ -74,6 +90,7 @@ class UserInfo(BaseModel):
     name: str
     email: str
     role: Literal["admin", "teacher", "student"]
+    subject: str = ""
 
 
 class LoginResponse(BaseModel):

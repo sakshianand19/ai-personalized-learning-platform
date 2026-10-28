@@ -6,7 +6,7 @@ from app.auth import Principal, ensure_student_access, get_current_user, require
 from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import Staff, Student, Submission
-from app.routers.common import get_or_404
+from app.routers.common import ensure_email_available, get_or_404
 from app.security import hash_password
 from app.schemas import (
     ContentSummary,
@@ -39,8 +39,7 @@ def create_student(
     db: Session = Depends(get_db),
     _: Principal = Depends(require_roles("admin")),
 ):
-    if db.scalar(select(Student.id).where(Student.email == payload.email.lower())):
-        raise HTTPException(status.HTTP_409_CONFLICT, "A student with this email already exists")
+    ensure_email_available(db, payload.email)
     _check_teacher(db, payload.teacher_id)
     student = Student(
         **payload.model_dump(exclude={"password"}) | {"email": payload.email.lower()},

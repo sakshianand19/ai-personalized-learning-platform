@@ -389,18 +389,25 @@ body.signed-out .app { display: none; }
 .login-points { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
 .login-points li { display: flex; gap: 10px; align-items: center; opacity: .92; font-size: 14.5px; }
 .login-points li::before { content: "✓"; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.2); font-size: 12px; font-weight: 700; flex: none; }
-.login-panel { display: grid; place-items: center; padding: 40px 24px; }
+.login-panel { display: grid; place-items: safe center; padding: 40px 24px; }
 .login-card { width: min(440px, 100%); display: flex; flex-direction: column; gap: 14px; animation: fade .25s ease; }
 .login-card h2 { font-size: 26px; font-weight: 800; }
 .login-card .back-link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; align-self: flex-start; margin-bottom: 0; }
-.role-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
-.role-card {
-  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 16px;
-  border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text);
-  font: inherit; cursor: pointer; transition: all .15s;
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.auth-tabs button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600; font-size: 14px; padding: 9px; border-radius: 9px; cursor: pointer; }
+.auth-tabs button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line); }
+.role-options { display: flex; flex-direction: column; gap: 8px; }
+.role-option {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 12px; background: var(--surface); transition: border-color .15s, box-shadow .15s;
 }
-.role-card:hover { border-color: var(--accent); box-shadow: 0 6px 20px rgba(91, 71, 245, .12); transform: translateY(-1px); }
-.role-card > svg { color: var(--muted); }
+.role-option:hover { border-color: var(--accent); }
+.role-option:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.role-option input { position: absolute; opacity: 0; pointer-events: none; }
+.role-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.role-option .role-icon { width: 38px; height: 38px; border-radius: 10px; }
+.role-option .role-icon svg { width: 18px; height: 18px; }
+.center { text-align: center; }
 .role-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .role-icon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; flex: none; color: #fff; }
 .role-icon svg { width: 22px; height: 22px; }
@@ -412,7 +419,6 @@ body.signed-out .app { display: none; }
 .password-wrap .btn { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 5px 10px; }
 .login-error { padding: 10px 12px; border-radius: 10px; background: var(--bad-soft); color: var(--bad); font-size: 13.5px; font-weight: 500; }
 .login-error[hidden] { display: none; }
-.login-cancel { align-self: center; }
 
 /* ---------- Tables & heatmap ---------- */
 .table-wrap { overflow-x: auto; margin: 0 -4px; }

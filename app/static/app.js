@@ -250,12 +250,12 @@ async function loadPeople() {
 
 /* ===================== Sign-in ===================== */
 
-function showLogin(role = null, message = "") {
+function showLogin(mode = "signin", message = "") {
   stopQuizKeys();
   closeModal();
   $("#login").hidden = false;
   document.body.classList.add("signed-out");
-  renderLoginCard(role, message);
+  renderLoginCard(mode, message);
 }
 
 function hideLogin() {
@@ -263,83 +263,127 @@ function hideLogin() {
   document.body.classList.remove("signed-out");
 }
 
-function renderLoginCard(role, message = "") {
+function renderLoginCard(mode = "signin", message = "") {
   const card = $("#login-card");
-  const cancel = state.user
-    ? `<button type="button" class="btn ghost sm login-cancel" id="login-cancel">Stay signed in as ${esc(state.user.name)}</button>`
-    : "";
   const notice = message ? `<div class="callout">${ICONS.info}<span>${esc(message)}</span></div>` : "";
+  const tabs = `
+    <div class="auth-tabs" role="tablist">
+      <button type="button" role="tab" data-mode="signin" class="${mode === "signin" ? "on" : ""}" aria-selected="${mode === "signin"}">Sign in</button>
+      <button type="button" role="tab" data-mode="signup" class="${mode === "signup" ? "on" : ""}" aria-selected="${mode === "signup"}">Create account</button>
+    </div>`;
+  const passwordField = (id, autocomplete, placeholder) => `
+    <div class="password-wrap">
+      <input class="input" id="${id}" type="password" autocomplete="${autocomplete}" required placeholder="${placeholder}">
+      <button type="button" class="btn ghost sm" data-toggle-password="${id}" aria-label="Show password">Show</button>
+    </div>`;
 
-  if (!role) {
+  if (mode === "signin") {
     card.innerHTML = `
-      <h2>Sign in</h2>
-      <p class="muted">Choose how you use LearnPath AI. You'll be asked for that role's credentials.</p>
+      <h2>Welcome back</h2>
+      <p class="muted">Sign in with your email and password.</p>
       ${notice}
-      <div class="role-cards">${Object.entries(ROLES).map(([id, r]) => `
-        <button class="role-card" data-pick="${id}">
-          <span class="role-icon ${id}">${ICONS[r.icon]}</span>
-          <span class="role-text"><strong>${r.label}</strong><span class="small muted">${r.blurb}</span></span>
-          ${ICONS.arrowR}
-        </button>`).join("")}
-      </div>
-      ${cancel}`;
-    $$("[data-pick]", card).forEach((b) => b.addEventListener("click", () => renderLoginCard(b.dataset.pick)));
-  } else {
-    const r = ROLES[role];
-    card.innerHTML = `
-      <button type="button" class="back-link" id="login-back">${ICONS.arrowL} All roles</button>
-      <div class="row" style="flex-wrap:nowrap;gap:14px;margin-bottom:6px">
-        <span class="role-icon ${role}">${ICONS[r.icon]}</span>
-        <div><h2>Sign in as ${r.label}</h2><p class="muted small">${r.blurb}</p></div>
-      </div>
-      ${notice}
-      <form id="login-form" class="stack" style="gap:14px;margin-top:8px" novalidate>
-        <div class="field"><label for="login-email">Email</label>
-          <input class="input" id="login-email" type="email" autocomplete="username" required placeholder="you@school.edu"></div>
-        <div class="field"><label for="login-password">Password</label>
-          <div class="password-wrap">
-            <input class="input" id="login-password" type="password" autocomplete="current-password" required placeholder="Your password">
-            <button type="button" class="btn ghost sm" id="toggle-password" aria-label="Show password">Show</button>
-          </div></div>
-        <div class="login-error" id="login-error" role="alert" hidden></div>
-        <button class="btn gradient lg" id="login-submit">Sign in as ${r.label}</button>
+      ${tabs}
+      <form id="auth-form" class="stack" style="gap:14px" novalidate>
+        <div class="field"><label for="auth-email">Email</label>
+          <input class="input" id="auth-email" type="email" autocomplete="username" required placeholder="you@school.edu"></div>
+        <div class="field"><label for="auth-password">Password</label>${passwordField("auth-password", "current-password", "Your password")}</div>
+        <div class="login-error" id="auth-error" role="alert" hidden></div>
+        <button class="btn gradient lg" id="auth-submit">Sign in</button>
       </form>
-      ${cancel}`;
-    $("#login-back").addEventListener("click", () => renderLoginCard(null));
-    $("#toggle-password").addEventListener("click", (e) => {
-      const input = $("#login-password");
-      input.type = input.type === "password" ? "text" : "password";
-      e.currentTarget.textContent = input.type === "password" ? "Show" : "Hide";
-    });
-    $("#login-form").addEventListener("submit", (e) => signIn(e, role));
-    setTimeout(() => $("#login-email")?.focus(), 50);
+      <p class="small muted center">New to LearnPath AI? <a href="#" data-switch="signup">Create an account</a></p>`;
+  } else {
+    card.innerHTML = `
+      <h2>Create your account</h2>
+      <p class="muted">Choose how you'll use LearnPath AI.</p>
+      ${notice}
+      ${tabs}
+      <form id="auth-form" class="stack" style="gap:14px" novalidate>
+        <div class="field"><span class="label">I am a</span>
+          <div class="role-options" role="radiogroup">${Object.entries(ROLES).map(([id, r], i) => `
+            <label class="role-option">
+              <input type="radio" name="signup-role" value="${id}" ${i === 0 ? "checked" : ""}>
+              <span class="role-icon ${id}">${ICONS[r.icon]}</span>
+              <span class="role-text"><strong>${r.label}</strong><span class="small muted">${r.blurb}</span></span>
+            </label>`).join("")}
+          </div></div>
+        <div class="field"><label for="auth-name">Full name</label>
+          <input class="input" id="auth-name" autocomplete="name" required maxlength="120" placeholder="e.g. Meera Iyer"></div>
+        <div class="field"><label for="auth-email">Email</label>
+          <input class="input" id="auth-email" type="email" autocomplete="email" required placeholder="you@school.edu"></div>
+        <div class="field" data-for-role="student"><label for="auth-grade">Grade</label>
+          <select class="input" id="auth-grade">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i === 6 ? "selected" : ""}>Grade ${i + 1}</option>`).join("")}</select></div>
+        <div class="field hidden" data-for-role="teacher"><label for="auth-subject">Subject (optional)</label>
+          <input class="input" id="auth-subject" maxlength="80" placeholder="e.g. Mathematics"></div>
+        <div class="field"><label for="auth-password">Password</label>${passwordField("auth-password", "new-password", "At least 8 characters")}</div>
+        <div class="field"><label for="auth-confirm">Confirm password</label>${passwordField("auth-confirm", "new-password", "Repeat your password")}</div>
+        <div class="login-error" id="auth-error" role="alert" hidden></div>
+        <button class="btn gradient lg" id="auth-submit">Create account</button>
+      </form>
+      <p class="small muted center">Already have an account? <a href="#" data-switch="signin">Sign in</a></p>`;
+    const syncRole = () => {
+      const role = $("input[name=signup-role]:checked", card).value;
+      $$("[data-for-role]", card).forEach((el) => el.classList.toggle("hidden", el.dataset.forRole !== role));
+    };
+    $$("input[name=signup-role]", card).forEach((r) => r.addEventListener("change", syncRole));
   }
-  $("#login-cancel")?.addEventListener("click", hideLogin);
+
+  $$("[data-mode]", card).forEach((b) => b.addEventListener("click", () => renderLoginCard(b.dataset.mode)));
+  $$("[data-switch]", card).forEach((a) =>
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      renderLoginCard(a.dataset.switch);
+    }),
+  );
+  $$("[data-toggle-password]", card).forEach((b) =>
+    b.addEventListener("click", () => {
+      const input = $(`#${b.dataset.togglePassword}`);
+      input.type = input.type === "password" ? "text" : "password";
+      b.textContent = input.type === "password" ? "Show" : "Hide";
+    }),
+  );
+  $("#auth-form").addEventListener("submit", (e) => submitAuth(e, mode));
+  setTimeout(() => $(mode === "signin" ? "#auth-email" : "#auth-name")?.focus(), 50);
 }
 
-async function signIn(event, role) {
+function authError(message) {
+  const error = $("#auth-error");
+  error.textContent = message;
+  error.hidden = !message;
+}
+
+async function submitAuth(event, mode) {
   event.preventDefault();
-  const email = $("#login-email").value.trim();
-  const password = $("#login-password").value;
-  const error = $("#login-error");
-  const button = $("#login-submit");
-  if (!email || !password) {
-    error.textContent = "Enter your email and password.";
-    error.hidden = false;
-    return;
+  const email = $("#auth-email").value.trim();
+  const password = $("#auth-password").value;
+  let path = "/auth/login";
+  let body = { email, password };
+
+  if (mode === "signup") {
+    const role = $("input[name=signup-role]:checked").value;
+    const name = $("#auth-name").value.trim();
+    if (!name || !email || !password) return authError("Fill in your name, email and password.");
+    if (password.length < 8) return authError("Use a password of at least 8 characters.");
+    if (password !== $("#auth-confirm").value) return authError("The passwords don't match.");
+    path = "/auth/signup";
+    body = { name, email, password, role };
+    if (role === "student") body.grade_level = Number($("#auth-grade").value);
+    if (role === "teacher") body.subject = $("#auth-subject").value.trim();
+  } else if (!email || !password) {
+    return authError("Enter your email and password.");
   }
-  error.hidden = true;
+
+  authError("");
+  const button = $("#auth-submit");
   const label = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = '<span class="spinner"></span> Signing in…';
+  button.innerHTML = `<span class="spinner"></span> ${mode === "signup" ? "Creating account…" : "Signing in…"}`;
   try {
-    const session = await api("/auth/login", { method: "POST", body: { email, password, role } });
+    const session = await api(path, { method: "POST", body });
     await startSession(session.access_token, session.user);
-    toast(`Welcome, ${session.user.name}`, "success");
+    toast(mode === "signup" ? `Welcome to LearnPath AI, ${session.user.name}!` : `Welcome back, ${session.user.name}`, "success");
   } catch (err) {
-    error.textContent = err.message;
-    error.hidden = false;
-    $("#login-password")?.select();
+    authError(err.message);
+    $("#auth-password")?.select();
   } finally {
     button.disabled = false;
     button.innerHTML = label;
@@ -365,7 +409,7 @@ function signOut(message = "") {
   store.remove("token");
   history.replaceState(null, "", location.pathname);
   $("#view").innerHTML = "";
-  showLogin(null, message);
+  showLogin("signin", message);
 }
 
 /* ===================== Router ===================== */

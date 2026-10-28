@@ -33,12 +33,22 @@ it reaches students.
 
 ## Sign-in and role-based access (RBAC)
 
-Every visitor starts at a sign-in screen. Choose **Student**, **Teacher** or **Admin** and enter
-that role's email and password. To use a different role, sign out and sign in again as that
-role. The demo is seeded with an admin, two teachers and a class of six students with
-quiz history, so every view has data from the start.
+Every visitor starts at the sign-in screen, which asks only for an email and password: the
+**account's role decides what the user can do**, so no role is chosen at sign-in.
 
-![Sign-in screen with the teacher credentials form](docs/screenshots/sign-in.png)
+New users click **Create account**, choose **Student**, **Teacher** or **Admin**, and fill in
+their details (a grade for students, an optional subject for teachers). They're signed in
+straight away. New students start without a teacher until an admin assigns them to a class, and
+new teachers start with an empty class. The demo is also seeded with an admin, two teachers and
+a class of six students with quiz history, so every view has data from the start.
+
+| Sign in | Create account |
+| --- | --- |
+| ![Sign-in form with email and password](docs/screenshots/sign-in.png) | ![Create-account form with a choice of student, teacher or admin](docs/screenshots/sign-up.png) |
+
+> **Open sign-up includes Admin.** Anyone who can reach the app can create an admin account and
+> manage every user. That suits a demo; a real deployment should restrict admin sign-up (for
+> example to an invite code or an existing admin).
 
 **Demo accounts** for trying each role:
 
@@ -74,7 +84,10 @@ calling the API directly can't get around them.
   the `teacher_id` parameter.
 - **Answer keys stay private:** the question bank (`/questions`) is staff-only. Students build
   quizzes from topic question counts and only see questions without answers.
-- Logging in uses the same error for a wrong email and a wrong password, so accounts can't be probed.
+- Logging in uses the same error, and takes about the same time, for a wrong email and a wrong
+  password, so accounts can't be probed.
+- Every email belongs to exactly one account across students and staff, so sign-in can find the
+  account (and its role) from the email alone.
 
 | Capability | Student | Teacher | Admin |
 | --- | :---: | :---: | :---: |
@@ -169,11 +182,13 @@ in three queries, however many students it has.
 ## API overview
 
 All endpoints are under `/api/v1` and, apart from login, need an `Authorization: Bearer <token>`
-header. Interactive docs are at `/docs`; use **Authorize** there with a token from `/auth/login`.
+header. Interactive docs are at `/docs`; use **Authorize** there with a token from `/auth/login`
+or `/auth/signup`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/auth/login` | Sign in with email, password and role; returns a bearer token |
+| `POST` | `/auth/signup` | Create an account with a chosen role; returns a bearer token |
+| `POST` | `/auth/login` | Sign in with email and password; returns a bearer token and the account's role |
 | `GET` | `/auth/me` | The signed-in user |
 | `POST` / `GET` | `/students` | Create / list students (teachers only ever get their own class) |
 | `PATCH` / `DELETE` | `/students/{id}` | Update a student or move them to another class / delete them and their history |
@@ -203,7 +218,7 @@ header. Interactive docs are at `/docs`; use **Authorize** there with a token fr
 ```bash
 # 1. Sign in as the demo student (id 1) and keep the token
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login -H "Content-Type: application/json" \
-  -d '{"email": "demo@student.example", "password": "Student@123", "role": "student"}' | jq -r .access_token)
+  -d '{"email": "demo@student.example", "password": "Student@123"}' | jq -r .access_token)
 
 # 2. Build a quiz across the seeded topics (the response has its id and questions, without answers)
 curl -X POST localhost:8000/api/v1/assessments -H "Authorization: Bearer $TOKEN" \

@@ -1,9 +1,10 @@
 from typing import TypeVar
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Base, Question, Submission
+from app.models import Base, Question, Staff, Student, Submission
 from app.schemas import AnswerIn, ResponseRead, SubmissionRead
 
 ModelT = TypeVar("ModelT", bound=Base)
@@ -14,6 +15,20 @@ def get_or_404(db: Session, model: type[ModelT], obj_id: int) -> ModelT:
     if obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{model.__name__} {obj_id} not found")
     return obj
+
+
+def email_in_use(db: Session, email: str) -> bool:
+    """Emails are unique across students and staff, so sign-in can find the account by email alone."""
+    email = email.strip().lower()
+    return bool(
+        db.scalar(select(Staff.id).where(Staff.email == email))
+        or db.scalar(select(Student.id).where(Student.email == email))
+    )
+
+
+def ensure_email_available(db: Session, email: str) -> None:
+    if email_in_use(db, email):
+        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
 
 
 def answers_to_map(answers: list[AnswerIn]) -> dict[int, str]:

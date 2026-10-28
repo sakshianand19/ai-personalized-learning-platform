@@ -47,15 +47,15 @@ def test_tokens_reject_tampering_and_expiry():
 
 
 @pytest.mark.parametrize(
-    ("role", "email", "password", "name"),
+    ("email", "password", "role", "name"),
     [
-        ("admin", "admin@learnpath.example", "Admin@123", "Neha Kapoor"),
-        ("teacher", "priya.verma@learnpath.example", "Teacher@123", "Ms. Priya Verma"),
-        ("student", "Aarav@Student.example", "Student@123", "Aarav Sharma"),
+        ("admin@learnpath.example", "Admin@123", "admin", "Neha Kapoor"),
+        ("priya.verma@learnpath.example", "Teacher@123", "teacher", "Ms. Priya Verma"),
+        ("Aarav@Student.example", "Student@123", "student", "Aarav Sharma"),
     ],
 )
-def test_login_for_each_role(anonymous_client, seeded, role, email, password, name):
-    response = anonymous_client.post(f"{API}/auth/login", json={"email": email, "password": password, "role": role})
+def test_login_finds_the_role_from_the_account(anonymous_client, seeded, email, password, role, name):
+    response = anonymous_client.post(f"{API}/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200
     body = response.json()
     assert body["user"]["role"] == role and body["user"]["name"] == name
@@ -65,19 +65,92 @@ def test_login_for_each_role(anonymous_client, seeded, role, email, password, na
     assert me.json()["name"] == name
 
 
+def test_role_cannot_be_chosen_at_login(anonymous_client, seeded):
+    # A student asking to be an admin still gets a student session.
+    body = anonymous_client.post(
+        f"{API}/auth/login", json={"email": "aarav@student.example", "password": "Student@123", "role": "admin"}
+    ).json()
+    assert body["user"]["role"] == "student"
+
+
 @pytest.mark.parametrize(
-    ("email", "password", "role"),
+    ("email", "password"),
+    [("admin@learnpath.example", "wrong-password"), ("nobody@learnpath.example", "Admin@123")],
+)
+def test_login_rejects_bad_credentials(anonymous_client, seeded, email, password):
+    response = anonymous_client.post(f"{API}/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Incorrect email or password"
+
+
+# --- Sign-up ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("payload", "role"),
     [
-        ("admin@learnpath.example", "wrong-password", "admin"),
-        ("nobody@learnpath.example", "Admin@123", "admin"),
-        ("priya.verma@learnpath.example", "Teacher@123", "admin"),  # right password, wrong role
-        ("aarav@student.example", "Student@123", "teacher"),
+        ({"name": "Riya Sen", "email": "Riya@Mail.example", "role": "student", "grade_level": 9}, "student"),
+        ({"name": "Mr. Arjun Das", "email": "arjun@mail.example", "role": "teacher", "subject": "History"}, "teacher"),
+        ({"name": "Kiran Rao", "email": "kiran@mail.example", "role": "admin"}, "admin"),
     ],
 )
-def test_login_rejects_bad_credentials(anonymous_client, seeded, email, password, role):
-    response = anonymous_client.post(f"{API}/auth/login", json={"email": email, "password": password, "role": role})
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect email or password for this role"
+def test_signup_creates_an_account_and_signs_it_in(anonymous_client, payload, role):
+    response = anonymous_client.post(f"{API}/auth/signup", json=payload | {"password": "Welcome@123"})
+    assert response.status_code == 201
+    session = response.json()
+    assert session["user"]["role"] == role
+    assert session["user"]["email"] == payload["email"].lower()
+    assert "password" not in str(session["user"])
+
+    headers = {"Authorization": f"Bearer {session['access_token']}"}
+    assert anonymous_client.get(f"{API}/auth/me", headers=headers).json()["role"] == role
+    login = anonymous_client.post(f"{API}/auth/login", json={"email": payload["email"], "password": "Welcome@123"})
+    assert login.json()["user"]["role"] == role
+
+
+def test_signed_up_users_get_their_roles_permissions(anonymous_client, seeded):
+    def signup(**fields):
+        body = anonymous_client.post(f"{API}/auth/signup", json=fields | {"password": "Welcome@123"}).json()
+        return {"Authorization": f"Bearer {body['access_token']}"}, body["user"]["id"]
+
+    student, student_id = signup(name="Riya", email="riya@mail.example", role="student", grade_level=9)
+    teacher, _ = signup(name="Arjun", email="arjun@mail.example", role="teacher")
+    admin, _ = signup(name="Kiran", email="kiran@mail.example", role="admin")
+
+    assert anonymous_client.get(f"{API}/students/{student_id}/learning-gaps", headers=student).status_code == 200
+    assert anonymous_client.get(f"{API}/students", headers=student).status_code == 403
+    # A new teacher starts with an empty class and can't see other classes.
+    assert anonymous_client.get(f"{API}/students", headers=teacher).json() == []
+    assert anonymous_client.get(f"{API}/students/{AARAV}", headers=teacher).status_code == 403
+    assert anonymous_client.get(f"{API}/reports/platform", headers=admin).status_code == 200
+    # New students start unassigned until an admin places them in a class.
+    assert anonymous_client.get(f"{API}/students/{student_id}", headers=admin).json()["teacher_id"] is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"name": "No grade", "email": "a@mail.example", "role": "student"},
+        {"name": "Short pw", "email": "b@mail.example", "role": "teacher", "password": "short"},
+        {"name": "Bad role", "email": "c@mail.example", "role": "owner"},
+        {"name": "Bad email", "email": "not-an-email", "role": "admin"},
+        {"name": "", "email": "d@mail.example", "role": "admin"},
+    ],
+)
+def test_signup_validation(anonymous_client, payload):
+    response = anonymous_client.post(f"{API}/auth/signup", json={"password": "Welcome@123"} | payload)
+    assert response.status_code == 422
+
+
+def test_emails_are_unique_across_all_accounts(anonymous_client, client, seeded):
+    taken_by_student = {"name": "X", "email": "AARAV@student.example", "role": "teacher", "password": "Welcome@123"}
+    assert anonymous_client.post(f"{API}/auth/signup", json=taken_by_student).status_code == 409
+    taken_by_staff = {"name": "X", "email": "admin@learnpath.example", "role": "student", "grade_level": 5,
+                      "password": "Welcome@123"}
+    assert anonymous_client.post(f"{API}/auth/signup", json=taken_by_staff).status_code == 409
+    # Admin-created accounts follow the same rule.
+    staff_with_student_email = {"name": "X", "email": "diya@student.example", "role": "teacher", "password": "Welcome@123"}
+    assert client.post(f"{API}/staff", json=staff_with_student_email).status_code == 409
 
 
 def test_new_accounts_can_log_in_and_never_expose_passwords(client, anonymous_client, seeded):
@@ -87,7 +160,7 @@ def test_new_accounts_can_log_in_and_never_expose_passwords(client, anonymous_cl
     ).json()
     assert "password" not in created and "password_hash" not in created
     login = anonymous_client.post(
-        f"{API}/auth/login", json={"email": "meera@school.example", "password": "Welcome@1", "role": "student"}
+        f"{API}/auth/login", json={"email": "meera@school.example", "password": "Welcome@1"}
     )
     assert login.status_code == 200
 
