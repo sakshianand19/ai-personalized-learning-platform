@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import require_roles
 from app.database import get_db
 from app.models import Staff
 from app.routers.common import get_or_404
 from app.schemas import Role, StaffCreate, StaffRead
+from app.security import hash_password
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+# Managing staff accounts is an admin-only capability.
+router = APIRouter(prefix="/staff", tags=["staff"], dependencies=[Depends(require_roles("admin"))])
 
 
 @router.post("", response_model=StaffRead, status_code=status.HTTP_201_CREATED)
@@ -15,7 +18,10 @@ def create_staff(payload: StaffCreate, db: Session = Depends(get_db)):
     email = payload.email.lower()
     if db.scalar(select(Staff.id).where(Staff.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "A staff member with this email already exists")
-    member = Staff(**payload.model_dump() | {"email": email})
+    member = Staff(
+        **payload.model_dump(exclude={"password"}) | {"email": email},
+        password_hash=hash_password(payload.password),
+    )
     db.add(member)
     db.commit()
     return member

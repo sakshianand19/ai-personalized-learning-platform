@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import Principal, ensure_can_submit, ensure_student_access, get_current_user
 from app.config import Settings, get_settings
 from app.database import get_db
-from app.models import Homework, Student, Topic, utcnow
+from app.models import Homework, Topic, utcnow
 from app.routers.common import answers_to_map, get_or_404, submission_to_read
 from app.schemas import HomeworkGenerate, HomeworkRead, HomeworkSubmit, SubmissionRead
 from app.services import gap_analyzer, personalization
@@ -30,9 +31,13 @@ def generate_homework(
     payload: HomeworkGenerate,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    user: Principal = Depends(get_current_user),
 ):
-    """Assign adaptive homework, targeting the student's weakest topic unless one is given."""
-    get_or_404(db, Student, payload.student_id)
+    """Assign adaptive homework, targeting the student's weakest topic unless one is given.
+
+    Students can assign practice to themselves; teachers to students in their class; admins to anyone.
+    """
+    ensure_student_access(db, user, payload.student_id)
     analysis = gap_analyzer.analyze_student(
         db,
         payload.student_id,
@@ -74,7 +79,9 @@ def list_homework(
     student_id: int,
     status_filter: Literal["assigned", "completed"] | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db),
+    user: Principal = Depends(get_current_user),
 ):
+    ensure_student_access(db, user, student_id)
     query = (
         select(Homework)
         .where(Homework.student_id == student_id)
@@ -87,13 +94,23 @@ def list_homework(
 
 
 @router.get("/{homework_id}", response_model=HomeworkRead)
-def get_homework(homework_id: int, db: Session = Depends(get_db)):
-    return _load_homework(db, homework_id)
+def get_homework(
+    homework_id: int, db: Session = Depends(get_db), user: Principal = Depends(get_current_user)
+):
+    homework = _load_homework(db, homework_id)
+    ensure_student_access(db, user, homework.student_id)
+    return homework
 
 
 @router.post("/{homework_id}/submit", response_model=SubmissionRead)
-def submit_homework(homework_id: int, payload: HomeworkSubmit, db: Session = Depends(get_db)):
+def submit_homework(
+    homework_id: int,
+    payload: HomeworkSubmit,
+    db: Session = Depends(get_db),
+    user: Principal = Depends(get_current_user),
+):
     homework = _load_homework(db, homework_id)
+    ensure_can_submit(user, homework.student_id)
     if homework.status == "completed":
         raise HTTPException(status.HTTP_409_CONFLICT, "Homework has already been submitted")
     homework.status = "completed"

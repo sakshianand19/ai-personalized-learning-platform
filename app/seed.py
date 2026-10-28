@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Assessment, LearningContent, Question, Staff, Student, Topic
 from app.services.content_processor import heuristic_analysis
+from app.security import hash_password
 from app.services.grading import grade_submission
 
 DEMO_CURRICULUM = [
@@ -105,6 +106,9 @@ def seed_demo_data(db: Session) -> None:
     _seed_people(db)
 
 
+# Public demo credentials, shown on the login page. Not for real accounts.
+DEMO_PASSWORDS = {"admin": "Admin@123", "teacher": "Teacher@123", "student": "Student@123"}
+
 DEMO_STAFF = [
     ("Neha Kapoor", "admin@learnpath.example", "admin", ""),
     ("Ms. Priya Verma", "priya.verma@learnpath.example", "teacher", "Mathematics"),
@@ -129,7 +133,9 @@ DEMO_STUDENTS = [
 
 
 def _seed_people(db: Session) -> None:
-    staff = {email: Staff(name=name, email=email, role=role, subject=subject)
+    # Hash each demo password once; PBKDF2 is deliberately slow and this runs on cold starts.
+    hashes = {role: hash_password(password) for role, password in DEMO_PASSWORDS.items()}
+    staff = {email: Staff(name=name, email=email, role=role, subject=subject, password_hash=hashes[role])
              for name, email, role, subject in DEMO_STAFF}
     db.add_all(staff.values())
     db.flush()
@@ -146,7 +152,11 @@ def _seed_people(db: Session) -> None:
 
     for name, email, grade, teacher_email, pattern in DEMO_STUDENTS:
         student = Student(
-            name=name, email=email, grade_level=grade, teacher_id=staff[teacher_email].id
+            name=name,
+            email=email,
+            grade_level=grade,
+            teacher_id=staff[teacher_email].id,
+            password_hash=hashes["student"],
         )
         db.add(student)
         db.flush()

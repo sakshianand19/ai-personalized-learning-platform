@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=3">
+  <link rel="stylesheet" href="/static/styles.css?v=4">
   <script>
     try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
@@ -37,11 +37,14 @@
       <header class="topbar">
         <div class="topbar-title" id="page-title">Dashboard</div>
         <div class="topbar-actions">
-          <div class="role-switch" id="role-switch" role="tablist" aria-label="View as"></div>
-          <label class="student-picker">
+          <div class="role-switch" id="role-switch" role="tablist" aria-label="Switch role (asks for credentials)"></div>
+          <div class="user-chip" id="user-chip">
             <span class="avatar" id="avatar">?</span>
-            <select id="person-select" aria-label="Current user"></select>
-          </label>
+            <div class="user-meta"><div class="user-name" id="user-name"></div><div class="user-role" id="user-role"></div></div>
+          </div>
+          <button class="btn ghost icon-only" id="logout" title="Sign out" aria-label="Sign out">
+            <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </button>
           <button class="btn ghost icon-only" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
             <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           </button>
@@ -51,6 +54,28 @@
     </div>
   </div>
 
+  <!-- Sign-in screen: shown until a role's credentials are verified by the API. -->
+  <section class="login" id="login" hidden>
+    <div class="login-brand">
+      <a class="brand" href="#">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 21l5-10 4 7 2-3 3 6" /></svg></span>
+        <span class="brand-text">LearnPath <b>AI</b></span>
+      </a>
+      <div>
+        <h1>Personalized learning, powered by AI.</h1>
+        <p>Adaptive quizzes and homework, learning-gap detection and AI content tools, with separate spaces for students, teachers and admins.</p>
+      </div>
+      <ul class="login-points">
+        <li>Role-based access: every request is checked on the server</li>
+        <li>Azure OpenAI + LangChain content processing</li>
+        <li>FastAPI backend with signed session tokens</li>
+      </ul>
+    </div>
+    <div class="login-panel">
+      <div class="login-card" id="login-card"></div>
+    </div>
+  </section>
+
   <div class="modal-backdrop" id="modal" hidden>
     <div class="modal" role="dialog" aria-modal="true">
       <button class="modal-close" id="modal-close" aria-label="Close">×</button>
@@ -59,6 +84,6 @@
   </div>
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

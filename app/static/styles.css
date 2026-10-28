@@ -372,6 +372,63 @@ kbd { font: inherit; font-size: 11.5px; padding: 1px 6px; border-radius: 5px; bo
 .role-note { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 0 4px 4px; }
 .role-note .pill { align-self: flex-start; }
 
+.role-switch .lock { font-size: 10px; margin-right: 4px; opacity: .7; }
+
+/* ---------- Signed-in user ---------- */
+.user-chip { display: flex; align-items: center; gap: 10px; padding: 4px 12px 4px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); min-width: 0; }
+.user-meta { min-width: 0; line-height: 1.2; }
+.user-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+/* ---------- Sign-in screen ---------- */
+body.signed-out .app { display: none; }
+.login { position: fixed; inset: 0; z-index: 40; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--bg); overflow-y: auto; }
+.login[hidden] { display: none; }
+.login-brand {
+  position: relative; overflow: hidden; color: #fff; background: var(--gradient);
+  padding: 40px 48px; display: flex; flex-direction: column; justify-content: space-between; gap: 32px;
+}
+.login-brand::after { content: ""; position: absolute; right: -120px; bottom: -120px; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.22), transparent 70%); }
+.login-brand .brand { color: #fff; padding: 0; }
+.login-brand .brand b { background: none; -webkit-background-clip: initial; background-clip: initial; color: #fff; }
+.login-brand .brand-mark { background: rgba(255,255,255,.2); box-shadow: none; }
+.login-brand h1 { font-size: 38px; font-weight: 800; line-height: 1.15; max-width: 460px; }
+.login-brand p { opacity: .9; margin-top: 14px; max-width: 460px; font-size: 16px; }
+.login-points { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
+.login-points li { display: flex; gap: 10px; align-items: center; opacity: .92; font-size: 14.5px; }
+.login-points li::before { content: "✓"; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.2); font-size: 12px; font-weight: 700; flex: none; }
+.login-panel { display: grid; place-items: center; padding: 40px 24px; }
+.login-card { width: min(440px, 100%); display: flex; flex-direction: column; gap: 14px; animation: fade .25s ease; }
+.login-card h2 { font-size: 26px; font-weight: 800; }
+.login-card .back-link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; align-self: flex-start; margin-bottom: 0; }
+.role-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.role-card {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 16px;
+  border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text);
+  font: inherit; cursor: pointer; transition: all .15s;
+}
+.role-card:hover { border-color: var(--accent); box-shadow: 0 6px 20px rgba(91, 71, 245, .12); transform: translateY(-1px); }
+.role-card > svg { color: var(--muted); }
+.role-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.role-icon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; flex: none; color: #fff; }
+.role-icon svg { width: 22px; height: 22px; }
+.role-icon.student { background: var(--gradient); }
+.role-icon.teacher { background: linear-gradient(135deg, #0f9d74, #34c3a0); }
+.role-icon.admin { background: linear-gradient(135deg, #e0761f, #f2a541); }
+.password-wrap { position: relative; }
+.password-wrap .input { padding-right: 70px; }
+.password-wrap .btn { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 5px 10px; }
+.login-error { padding: 10px 12px; border-radius: 10px; background: var(--bad-soft); color: var(--bad); font-size: 13.5px; font-weight: 500; }
+.login-error[hidden] { display: none; }
+.demo-box { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; border: 1px dashed var(--line); background: var(--surface-2); }
+.demo-account {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer;
+}
+.demo-account:hover { border-color: var(--accent); }
+.demo-box code { font-size: 12.5px; padding: 1px 6px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+.login-cancel { align-self: center; }
+
 /* ---------- Tables & heatmap ---------- */
 .table-wrap { overflow-x: auto; margin: 0 -4px; }
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -408,6 +465,12 @@ kbd { font: inherit; font-size: 11.5px; padding: 1px 6px; border-radius: 5px; bo
   .grid.split, .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
 }
 @media (max-width: 860px) {
+  .login { grid-template-columns: 1fr; }
+  .login-brand { padding: 24px 20px; gap: 16px; }
+  .login-brand h1 { font-size: 24px; }
+  .login-brand p { font-size: 14.5px; margin-top: 8px; }
+  .login-points { display: none; }
+  .login-panel { padding: 24px 16px 40px; place-items: start center; }
   .app { grid-template-columns: 1fr; }
   .sidebar {
     position: fixed; z-index: 20; top: auto; bottom: 0; left: 0; right: 0; height: auto;
@@ -428,11 +491,12 @@ kbd { font: inherit; font-size: 11.5px; padding: 1px 6px; border-radius: 5px; bo
   .topbar { flex-wrap: wrap; }
   .topbar-actions { width: 100%; gap: 6px; }
   .role-switch { flex: none; }
-  .role-switch button { padding: 6px 9px; font-size: 12.5px; }
-  .student-picker { flex: 1; min-width: 0; padding-left: 10px; }
-  .student-picker .avatar { display: none; }
-  .student-picker select { width: 100%; max-width: none; text-overflow: ellipsis; }
-  .icon-only { flex: none; }
+  .role-switch button { padding: 6px 8px; font-size: 12px; }
+  .role-switch .lock { display: none; }
+  .user-chip { flex: 1; padding-right: 8px; }
+  .user-chip .avatar { width: 26px; height: 26px; font-size: 11px; }
+  .user-role { display: none; }
+  .icon-only { flex: none; width: 34px; height: 34px; }
 }
 @media (max-width: 480px) {
   .grid.cols-4 { gap: 12px; }

@@ -17,23 +17,34 @@ EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 Role = Literal["admin", "teacher"]
 
 
-class StaffCreate(BaseModel):
+Password = Field(min_length=8, max_length=128)
+
+
+class StaffBase(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(pattern=EMAIL_PATTERN, max_length=255)
     role: Role
     subject: str = Field(default="", max_length=80)
 
 
-class StaffRead(ORMModel, StaffCreate):
+class StaffCreate(StaffBase):
+    password: str = Password
+
+
+class StaffRead(ORMModel, StaffBase):
     id: int
     created_at: datetime
 
 
-class StudentCreate(BaseModel):
+class StudentBase(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(pattern=EMAIL_PATTERN, max_length=255)
     grade_level: int = Field(ge=1, le=12)
     teacher_id: int | None = None
+
+
+class StudentCreate(StudentBase):
+    password: str = Password
 
 
 class StudentUpdate(BaseModel):
@@ -44,9 +55,32 @@ class StudentUpdate(BaseModel):
     teacher_id: int | None = None
 
 
-class StudentRead(ORMModel, StudentCreate):
+class StudentRead(ORMModel, StudentBase):
     id: int
     created_at: datetime
+
+
+# --- Auth ------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=1, max_length=128)
+    role: Literal["admin", "teacher", "student"]
+
+
+class UserInfo(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: Literal["admin", "teacher", "student"]
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+    user: UserInfo
 
 
 class TopicCreate(BaseModel):
@@ -57,6 +91,7 @@ class TopicCreate(BaseModel):
 
 class TopicRead(ORMModel, TopicCreate):
     id: int
+    question_count: int = Field(default=0, description="Validated questions available for quizzes.")
 
 
 # --- Content -----------------------------------------------------------------

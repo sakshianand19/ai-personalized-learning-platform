@@ -11,7 +11,7 @@
 
 A full-stack personalized learning platform: a FastAPI backend that uses Azure OpenAI through
 LangChain to process learning material and validate questions, plus an interactive web app with
-separate **student**, **teacher** and **admin** views. Students take quizzes, complete adaptive
+separate **student**, **teacher** and **admin** views behind sign-in and role-based access control. Students take quizzes, complete adaptive
 homework and follow a personalized study path; teachers track their class and assign work;
 admins manage users, classes and the curriculum.
 
@@ -31,27 +31,60 @@ Teachers (or the Content Studio) add learning material. The AI summarizes it, ex
 concepts, rates its difficulty and generates questions. Every question passes a validator before
 it reaches students.
 
-## Three views: student, teacher, admin
+## Sign-in and role-based access (RBAC)
 
-Switch roles from the **Student / Teacher / Admin** toggle in the top bar, then pick who you are
-from the menu beside it. The demo is seeded with an admin, two teachers and a class of six
-students with quiz history, so every view has data from the start.
+Every visitor starts at a sign-in screen. Choose **Student**, **Teacher** or **Admin** and enter
+that role's email and password; switching role from the top bar asks for the other role's
+credentials too. The demo is seeded with an admin, two teachers and a class of six students with
+quiz history, so every view has data from the start.
+
+![Sign-in screen with the teacher credentials form and demo accounts](docs/screenshots/sign-in.png)
+
+**Demo accounts** (also shown on the sign-in screen):
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@learnpath.example` | `Admin@123` |
+| Teacher | `priya.verma@learnpath.example` or `rohan.mehta@learnpath.example` | `Teacher@123` |
+| Student | `demo@student.example` (no history yet) or `aarav@student.example` | `Student@123` |
 
 | Role | What they can do |
 | --- | --- |
-| **Student** | Dashboard with mastery and gaps, practice quizzes, adaptive homework, personalized learning path |
-| **Teacher** | Class overview with a mastery heatmap and "needs attention" list, per-student insights, assign homework to one or many students (each gets their own weakest topic), Content Studio, Validator |
-| **Admin** | Platform stats and recent activity, add and remove students, teachers and admins, move students between classes, manage topics, Content Studio, Validator |
-
-Teachers and admins can also **view as a student** to see exactly what that student sees.
+| **Student** | Dashboard with mastery and gaps, practice quizzes, adaptive homework, personalized learning path; **only their own data** |
+| **Teacher** | Class overview with a mastery heatmap and "needs attention" list, per-student insights, assign homework to one or many students, Content Studio, Validator; **only students in their own class** |
+| **Admin** | Platform stats, any teacher's class, add and remove students, teachers and admins (each with an initial password), move students between classes, manage topics, Content Studio, Validator |
 
 | Teacher: class overview | Admin: platform overview |
 | --- | --- |
 | ![Teacher class overview with topic performance, students needing attention and a mastery heatmap](docs/screenshots/teacher-class.png) | ![Admin overview with platform stats, classes, recent activity and curriculum inventory](docs/screenshots/admin-overview.png) |
 
-> The role switcher is a demo convenience: there's no login, so anyone can open any view. A
-> production deployment would put authentication (for example Azure AD B2C or OAuth) in front of
-> these views and check the role on every API request.
+### How access is enforced
+
+Permissions are checked **on the server for every API request**, not just hidden in the UI, so
+calling the API directly can't get around them.
+
+- **Passwords** are hashed with PBKDF2-SHA256 (120,000 iterations, random salt per password) and
+  never returned by the API.
+- **Sessions** are stateless bearer tokens: a JSON payload (user id, role, expiry) signed with
+  HMAC-SHA256 using `SECRET_KEY`. Tampered, expired or wrongly signed tokens are rejected, and
+  sessions last 8 hours by default.
+- **Route guards** (`app/auth.py`): `require_roles(...)` limits endpoints to roles, and
+  `ensure_student_access` limits per-student data to admins, the student's own teacher and the
+  student themself. Teachers asking for another class get `403`, even if they change the URL or
+  the `teacher_id` parameter.
+- **Answer keys stay private:** the question bank (`/questions`) is staff-only. Students build
+  quizzes from topic question counts and only see questions without answers.
+- Logging in uses the same error for a wrong email and a wrong password, so accounts can't be probed.
+
+| Capability | Student | Teacher | Admin |
+| --- | :---: | :---: | :---: |
+| Own dashboard, quizzes, homework, learning path | ✅ | – | – |
+| View a student's gaps and activity | Self only | Own class | All |
+| Assign homework | Self only | Own class | All |
+| Class report and heatmap | – | Own class | Any class |
+| Content Studio, question bank, validator | – | ✅ | ✅ |
+| Create topics | – | ✅ | ✅ |
+| Manage users and classes, platform report | – | – | ✅ |
 
 ## Screenshots
 
@@ -106,6 +139,8 @@ step.
 ```
 app/
 ├── main.py              FastAPI app, routers, static frontend, /health
+├── auth.py              RBAC: current user, role guards, per-student access rules
+├── security.py          Password hashing (PBKDF2) and signed session tokens
 ├── static/              Single-page web app (index.html, styles.css, app.js)
 ├── config.py            Settings from environment / .env (pydantic-settings)
 ├── database.py          SQLAlchemy engine/session, table creation, demo seeding
@@ -113,7 +148,7 @@ app/
 │                        homework, submissions, responses, topic mastery)
 ├── schemas.py           Pydantic request/response models
 ├── seed.py              Demo curriculum, staff and a class with quiz history
-├── routers/             students · staff · topics · content · questions · assessments ·
+├── routers/             auth · students · staff · topics · content · questions · assessments ·
 │                        homework · reports (class and platform)
 └── services/
     ├── llm.py                 Azure OpenAI chat model (LangChain) as a FastAPI dependency
@@ -133,11 +168,14 @@ in three queries, however many students it has.
 
 ## API overview
 
-All endpoints are under `/api/v1`. Interactive docs are at `/docs`.
+All endpoints are under `/api/v1` and, apart from login, need an `Authorization: Bearer <token>`
+header. Interactive docs are at `/docs`; use **Authorize** there with a token from `/auth/login`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` / `GET` | `/students` | Create / list students (filter by `teacher_id`) |
+| `POST` | `/auth/login` | Sign in with email, password and role; returns a bearer token |
+| `GET` | `/auth/me` | The signed-in user |
+| `POST` / `GET` | `/students` | Create / list students (teachers only ever get their own class) |
 | `PATCH` / `DELETE` | `/students/{id}` | Update a student or move them to another class / delete them and their history |
 | `POST` / `GET` | `/staff` | Create / list admins and teachers (filter by `role`) |
 | `DELETE` | `/staff/{id}` | Remove a staff member (their students become unassigned; the last admin can't be removed) |
@@ -163,18 +201,23 @@ All endpoints are under `/api/v1`. Interactive docs are at `/docs`.
 ### Example flow
 
 ```bash
-# 1. Diagnostic assessment across the seeded topics
-curl -X POST localhost:8000/api/v1/assessments -H "Content-Type: application/json" \
-  -d '{"title": "Diagnostic", "topic_ids": [1, 2, 3]}'
+# 1. Sign in as the demo student (id 1) and keep the token
+TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email": "demo@student.example", "password": "Student@123", "role": "student"}' | jq -r .access_token)
 
-# 2. Submit answers for the demo student
-curl -X POST localhost:8000/api/v1/assessments/1/submit -H "Content-Type: application/json" \
+# 2. Build a quiz across the seeded topics (the response has its id and questions, without answers)
+curl -X POST localhost:8000/api/v1/assessments -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"title": "Diagnostic", "topic_ids": [1, 2, 3]}'
+
+# 3. Submit answers, using the assessment id from step 2
+curl -X POST localhost:8000/api/v1/assessments/2/submit -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
   -d '{"student_id": 1, "answers": [{"question_id": 1, "answer": "Chlorophyll"}]}'
 
-# 3. See the learning gaps, then assign adaptive homework
-curl localhost:8000/api/v1/students/1/learning-gaps
-curl -X POST localhost:8000/api/v1/homework/generate -H "Content-Type: application/json" \
-  -d '{"student_id": 1}'
+# 4. See your learning gaps, then get adaptive homework
+curl localhost:8000/api/v1/students/1/learning-gaps -H "Authorization: Bearer $TOKEN"
+curl -X POST localhost:8000/api/v1/homework/generate -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"student_id": 1}'
 ```
 
 ## Running locally
@@ -200,6 +243,8 @@ Open http://localhost:8000 for the web app or http://localhost:8000/docs for the
 | `AZURE_OPENAI_DEPLOYMENT` | – | Chat model deployment name |
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | API version |
 | `DATABASE_URL` | SQLite (`/tmp` on Vercel) | Any SQLAlchemy URL; `postgres://` URLs are supported |
+| `SECRET_KEY` | development key | Signs session tokens. **Set a long random value in production**; all instances must share it |
+| `SESSION_HOURS` | `8` | How long a sign-in lasts |
 | `SEED_DEMO_DATA` | `true` | Seed demo topics, content, questions, staff and a class with quiz history |
 | `MASTERY_THRESHOLD` | `0.6` | Mastery below this is a learning gap |
 | `MIN_ATTEMPTS_FOR_GAP` | `2` | Answers needed before a topic can be judged |
@@ -221,7 +266,10 @@ The app is deployed on Vercel, which detects FastAPI automatically from `app/mai
 configuration is needed.
 
 1. Import the GitHub repo at [vercel.com/new](https://vercel.com/new) (no build settings needed).
-2. Optionally add the Azure OpenAI variables under **Settings → Environment Variables**.
+2. Under **Settings → Environment Variables**, set `SECRET_KEY` to a long random string (for
+   example the output of `python -c "import secrets; print(secrets.token_urlsafe(48))"`), and
+   optionally the Azure OpenAI variables. Without `SECRET_KEY` the app falls back to a public
+   development key, which means anyone who reads this repo could forge a session token.
 3. For persistent data, set `DATABASE_URL` to a hosted PostgreSQL database.
 
 **About the live demo:** it runs without Azure OpenAI keys, so its AI features use the built-in

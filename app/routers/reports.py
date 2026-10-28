@@ -2,10 +2,11 @@
 
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth import Principal, require_roles
 from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import (
@@ -44,8 +45,16 @@ def class_report(
     teacher_id: int | None = None,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    user: Principal = Depends(require_roles("admin", "teacher")),
 ):
-    """Mastery and gaps for a teacher's students (or every student when no teacher is given)."""
+    """Mastery and gaps for a teacher's students (or every student when no teacher is given).
+
+    Teachers always get their own class; only admins can look at another teacher's class.
+    """
+    if user.role == "teacher":
+        if teacher_id not in (None, user.id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Teachers can only view their own class")
+        teacher_id = user.id
     if teacher_id is not None:
         get_or_404(db, Staff, teacher_id)
     student_query = select(Student).order_by(Student.name)
@@ -125,7 +134,7 @@ def class_report(
 
 
 @router.get("/platform", response_model=PlatformReport)
-def platform_report(db: Session = Depends(get_db)):
+def platform_report(db: Session = Depends(get_db), _: Principal = Depends(require_roles("admin"))):
     """Platform-wide counts, content inventory and recent activity for admins."""
 
     def count(model, *where) -> int:

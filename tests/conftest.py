@@ -13,7 +13,9 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from langchain_core.language_models.fake_chat_models import FakeListChatModel  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
+from app.security import create_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Base  # noqa: E402
 from app.seed import seed_demo_data  # noqa: E402
@@ -40,10 +42,38 @@ def seeded(db):
     return db
 
 
+def auth_headers(role: str, user_id: int, name: str = "Test user") -> dict[str, str]:
+    """Headers for a signed session token, as if that user had logged in."""
+    token = create_token({"sub": user_id, "role": role, "name": name}, get_settings().secret_key, 3600)
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture
-def client():
+def anonymous_client():
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def client(anonymous_client):
+    """Signed in as an admin, who may call every endpoint; RBAC itself is tested separately."""
+    anonymous_client.headers.update(auth_headers("admin", 1, "Test admin"))
+    return anonymous_client
+
+
+@pytest.fixture
+def as_user():
+    """Build a separate client signed in as a specific role and user id."""
+    clients = []
+
+    def _make(role: str, user_id: int) -> TestClient:
+        test_client = TestClient(app, headers=auth_headers(role, user_id))
+        clients.append(test_client)
+        return test_client
+
+    yield _make
+    for test_client in clients:
+        test_client.close()
 
 
 def fake_llm(*responses: dict | str) -> FakeListChatModel:

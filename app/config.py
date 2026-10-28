@@ -5,6 +5,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEV_SECRET_KEY = "dev-only-insecure-secret-change-me"
+
+
 def _default_database_url() -> str:
     # Vercel's filesystem is read-only except for /tmp.
     if os.getenv("VERCEL"):
@@ -25,6 +28,10 @@ class Settings(BaseSettings):
     azure_openai_deployment: str | None = None
     llm_temperature: float = 0.2
     llm_timeout_seconds: float = 30.0
+
+    # Signs session tokens. Set a long random value in production; every instance must share it.
+    secret_key: str = DEV_SECRET_KEY
+    session_hours: int = 8
 
     # A topic whose mastery is below this threshold is reported as a learning gap.
     mastery_threshold: float = 0.6

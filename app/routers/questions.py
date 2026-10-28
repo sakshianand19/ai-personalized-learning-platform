@@ -3,6 +3,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import require_roles
 from app.database import get_db
 from app.models import LearningContent, Question, Topic
 from app.routers.common import get_or_404
@@ -10,7 +11,10 @@ from app.schemas import QuestionCreate, QuestionRead, QuestionValidateRequest, V
 from app.services.llm import get_llm
 from app.services.question_validator import QuestionDraft, validate_question
 
-router = APIRouter(prefix="/questions", tags=["questions"])
+# The question bank includes answer keys, so only staff may read or change it.
+router = APIRouter(
+    prefix="/questions", tags=["questions"], dependencies=[Depends(require_roles("admin", "teacher"))]
+)
 
 
 @router.post("/validate", response_model=ValidationReport)

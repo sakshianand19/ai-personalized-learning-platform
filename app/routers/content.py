@@ -3,6 +3,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import Principal, get_current_user, require_roles
 from app.database import get_db
 from app.models import LearningContent, Question, Topic
 from app.routers.common import get_or_404
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/content", tags=["content"])
 @router.post("", response_model=ContentRead, status_code=status.HTTP_201_CREATED)
 def create_content(
     payload: ContentCreate,
+    _: Principal = Depends(require_roles("admin", "teacher")),
     db: Session = Depends(get_db),
     llm: BaseChatModel | None = Depends(get_llm),
 ):
@@ -45,7 +47,11 @@ def create_content(
 
 
 @router.get("", response_model=list[ContentRead])
-def list_content(topic_id: int | None = None, db: Session = Depends(get_db)):
+def list_content(
+    topic_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(get_current_user),
+):
     query = select(LearningContent).order_by(LearningContent.id)
     if topic_id is not None:
         query = query.where(LearningContent.topic_id == topic_id)
@@ -53,7 +59,9 @@ def list_content(topic_id: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/{content_id}", response_model=ContentRead)
-def get_content(content_id: int, db: Session = Depends(get_db)):
+def get_content(
+    content_id: int, db: Session = Depends(get_db), _: Principal = Depends(get_current_user)
+):
     return get_or_404(db, LearningContent, content_id)
 
 
@@ -61,6 +69,7 @@ def get_content(content_id: int, db: Session = Depends(get_db)):
 def generate_questions(
     content_id: int,
     payload: GenerateQuestionsRequest,
+    _: Principal = Depends(require_roles("admin", "teacher")),
     db: Session = Depends(get_db),
     llm: BaseChatModel | None = Depends(get_llm),
 ):

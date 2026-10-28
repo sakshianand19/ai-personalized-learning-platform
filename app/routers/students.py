@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import Principal, ensure_student_access, get_current_user, require_roles
 from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import Staff, Student, Submission
 from app.routers.common import get_or_404
+from app.security import hash_password
 from app.schemas import (
     ContentSummary,
     GapReport,
@@ -32,11 +34,18 @@ def _check_teacher(db: Session, teacher_id: int | None) -> None:
 
 
 @router.post("", response_model=StudentRead, status_code=status.HTTP_201_CREATED)
-def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
+def create_student(
+    payload: StudentCreate,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_roles("admin")),
+):
     if db.scalar(select(Student.id).where(Student.email == payload.email.lower())):
         raise HTTPException(status.HTTP_409_CONFLICT, "A student with this email already exists")
     _check_teacher(db, payload.teacher_id)
-    student = Student(**payload.model_dump() | {"email": payload.email.lower()})
+    student = Student(
+        **payload.model_dump(exclude={"password"}) | {"email": payload.email.lower()},
+        password_hash=hash_password(payload.password),
+    )
     db.add(student)
     db.commit()
     return student
@@ -44,8 +53,15 @@ def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
 
 @router.get("", response_model=list[StudentRead])
 def list_students(
-    teacher_id: int | None = None, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)
+    teacher_id: int | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: Principal = Depends(require_roles("admin", "teacher")),
 ):
+    """Admins see everyone; teachers only ever see their own class."""
+    if user.role == "teacher":
+        teacher_id = user.id
     query = select(Student).order_by(Student.id).offset(skip).limit(min(limit, 200))
     if teacher_id is not None:
         query = query.where(Student.teacher_id == teacher_id)
@@ -53,12 +69,19 @@ def list_students(
 
 
 @router.get("/{student_id}", response_model=StudentRead)
-def get_student(student_id: int, db: Session = Depends(get_db)):
-    return get_or_404(db, Student, student_id)
+def get_student(
+    student_id: int, db: Session = Depends(get_db), user: Principal = Depends(get_current_user)
+):
+    return ensure_student_access(db, user, student_id)
 
 
 @router.patch("/{student_id}", response_model=StudentRead)
-def update_student(student_id: int, payload: StudentUpdate, db: Session = Depends(get_db)):
+def update_student(
+    student_id: int,
+    payload: StudentUpdate,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_roles("admin")),
+):
     student = get_or_404(db, Student, student_id)
     changes = payload.model_dump(exclude_unset=True)
     if "teacher_id" in changes:
@@ -71,16 +94,23 @@ def update_student(student_id: int, payload: StudentUpdate, db: Session = Depend
 
 
 @router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_student(student_id: int, db: Session = Depends(get_db)):
+def delete_student(
+    student_id: int, db: Session = Depends(get_db), _: Principal = Depends(require_roles("admin"))
+):
     """Delete a student and, via cascades, their submissions, homework and mastery."""
     db.delete(get_or_404(db, Student, student_id))
     db.commit()
 
 
 @router.get("/{student_id}/submissions", response_model=list[SubmissionSummary])
-def list_submissions(student_id: int, limit: int = 10, db: Session = Depends(get_db)):
+def list_submissions(
+    student_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    user: Principal = Depends(get_current_user),
+):
     """The student's most recent graded assessments and homework."""
-    get_or_404(db, Student, student_id)
+    ensure_student_access(db, user, student_id)
     return db.scalars(
         select(Submission)
         .where(Submission.student_id == student_id)
@@ -91,10 +121,13 @@ def list_submissions(student_id: int, limit: int = 10, db: Session = Depends(get
 
 @router.get("/{student_id}/learning-gaps", response_model=GapReport)
 def learning_gaps(
-    student_id: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)
+    student_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    user: Principal = Depends(get_current_user),
 ):
     """Identify topics where the student's mastery is below the target threshold."""
-    get_or_404(db, Student, student_id)
+    ensure_student_access(db, user, student_id)
     analysis = gap_analyzer.analyze_student(
         db,
         student_id,
@@ -111,10 +144,13 @@ def learning_gaps(
 
 @router.get("/{student_id}/learning-path", response_model=LearningPath)
 def learning_path(
-    student_id: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)
+    student_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    user: Principal = Depends(get_current_user),
 ):
     """A personalised, ordered study plan: weakest topics first, with level-matched content."""
-    get_or_404(db, Student, student_id)
+    ensure_student_access(db, user, student_id)
     analysis = gap_analyzer.analyze_student(
         db,
         student_id,

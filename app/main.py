@@ -7,9 +7,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.config import get_settings
+from app.config import DEV_SECRET_KEY, get_settings
 from app.database import init_db
-from app.routers import assessments, content, homework, questions, reports, staff, students, topics
+from app.routers import assessments, auth, content, homework, questions, reports, staff, students, topics
 from app.services.llm import llm_provider_name
 
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +32,11 @@ Without Azure OpenAI credentials, the AI features fall back to deterministic heu
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    if settings.secret_key == DEV_SECRET_KEY:
+        logging.getLogger(__name__).warning(
+            "SECRET_KEY is not set: session tokens use a public development key. "
+            "Set SECRET_KEY to a long random value before real use."
+        )
     # Runs at import rather than in a lifespan hook so serverless cold starts are covered too.
     init_db(seed=settings.seed_demo_data)
 
@@ -39,7 +44,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
     )
-    for router in (students.router, topics.router, content.router, questions.router,
+    for router in (auth.router, students.router, topics.router, content.router, questions.router,
                    assessments.router, homework.router, staff.router, reports.router):
         app.include_router(router, prefix=API_PREFIX)
 

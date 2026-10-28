@@ -26,7 +26,7 @@ def test_health_and_landing_page(client):
 
 
 def test_student_crud_and_duplicate_email(client):
-    payload = {"name": "Asha", "email": "Asha@Example.com", "grade_level": 8}
+    payload = {"name": "Asha", "email": "Asha@Example.com", "grade_level": 8, "password": "Passw0rd!"}
     created = client.post(f"{API}/students", json=payload)
     assert created.status_code == 201
     assert created.json()["email"] == "asha@example.com"

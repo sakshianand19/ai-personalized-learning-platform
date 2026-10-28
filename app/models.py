@@ -48,6 +48,7 @@ class Staff(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     role: Mapped[str] = mapped_column(String(20), index=True)
     subject: Mapped[str] = mapped_column(String(80), default="")
+    password_hash: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -61,6 +62,7 @@ class Student(Base):
     teacher_id: Mapped[int | None] = mapped_column(
         ForeignKey("staff.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    password_hash: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

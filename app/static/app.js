@@ -13,18 +13,20 @@ const LETTERS = "ABCDEF";
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
   set(key, value) { try { localStorage.setItem(key, value); } catch { /* storage unavailable */ } },
+  remove(key) { try { localStorage.removeItem(key); } catch { /* storage unavailable */ } },
 };
 
 async function api(path, { method = "GET", body } = {}) {
-  const res = await fetch(API + path, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const headers = {};
+  if (body) headers["Content-Type"] = "application/json";
+  if (state.token) headers.Authorization = `Bearer ${state.token}`;
+  const res = await fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const err = new Error(errorMessage(data) || `Request failed (${res.status})`);
     err.status = res.status;
+    // An expired or revoked session sends the user back to the sign-in screen.
+    if (res.status === 401 && state.token && !path.startsWith("/auth/login")) signOut("Your session has ended. Please sign in again.");
     throw err;
   }
   return data;
@@ -77,42 +79,56 @@ const STATUS = {
   mastered: { label: "Mastered", cls: "good" },
 };
 
+// The server enforces every permission; this table only decides what the UI offers each role.
 const ROLES = {
   student: {
     label: "Student",
+    icon: "practice",
+    blurb: "Take quizzes, do homework and follow your learning path.",
     nav: [["dashboard", "Dashboard"], ["practice", "Practice"], ["homework", "Homework"], ["path", "Learning Path"]],
-    note: "Practise, take quizzes and follow your learning path.",
+    note: "You can see only your own progress.",
+    demo: [["Demo Student", "demo@student.example"], ["Aarav Sharma", "aarav@student.example"]],
+    password: "Student@123",
   },
   teacher: {
     label: "Teacher",
+    icon: "class",
+    blurb: "Track your class, spot learning gaps and assign homework.",
     nav: [["class", "My Class"], ["assign", "Assign Homework"], ["studio", "Content Studio"], ["validator", "Validator"]],
     hidden: { student: "Student Insights" },
-    note: "Track your class, spot gaps and assign work.",
+    note: "You can see only students in your class.",
+    demo: [["Ms. Priya Verma", "priya.verma@learnpath.example"], ["Mr. Rohan Mehta", "rohan.mehta@learnpath.example"]],
+    password: "Teacher@123",
   },
   admin: {
     label: "Admin",
+    icon: "admin",
+    blurb: "Manage users, classes and the curriculum across the platform.",
     nav: [["admin", "Overview"], ["users", "Users"], ["topics", "Topics"], ["studio", "Content Studio"], ["validator", "Validator"]],
-    hidden: { student: "Student Insights" },
-    note: "Manage users, classes and the curriculum.",
+    hidden: { student: "Student Insights", class: "Class" },
+    note: "Full access to every class and account.",
+    demo: [["Neha Kapoor", "admin@learnpath.example"]],
+    password: "Admin@123",
   },
 };
 
 const state = {
-  role: "student",
-  personId: null,
+  token: null,
+  user: null, // { id, name, email, role } from the API, never from the URL or storage alone
   people: { student: [], teacher: [], admin: [] },
   topics: [],
   quiz: null,
   keyHandler: null,
 };
-const person = () => state.people[state.role].find((p) => p.id === state.personId);
-const student = () => (state.role === "student" ? person() : null);
+Object.defineProperty(state, "role", { get: () => state.user?.role ?? null });
+// Student views read this: the signed-in student's own id.
+Object.defineProperty(state, "studentId", { get: () => (state.user?.role === "student" ? state.user.id : null) });
+const person = () => state.user;
+const student = () => (state.user?.role === "student" ? state.user : null);
 const studentById = (id) => state.people.student.find((s) => s.id === id);
-const teacherName = (id) => state.people.teacher.find((t) => t.id === id)?.name ?? "Unassigned";
+const teacherName = (id) => state.people.teacher.find((t) => t.id === id)?.name ?? (id ? "Another teacher" : "Unassigned");
 const topicName = (id) => state.topics.find((t) => t.id === id)?.name ?? `Topic ${id}`;
 const initials = (name) => name.replace(/^(Ms|Mr|Mrs|Dr)\.?\s+/, "").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-// Student views read this; it's always the selected student in the student role.
-Object.defineProperty(state, "studentId", { get: () => (state.role === "student" ? state.personId : null) });
 
 function setView(html, { animate = true } = {}) {
   const el = $("#view");
@@ -192,19 +208,18 @@ function relativeTime(iso) {
 /* ===================== Shell ===================== */
 
 function renderShell() {
-  const role = ROLES[state.role];
+  const user = state.user;
+  const role = ROLES[user.role];
   $("#nav").innerHTML = role.nav.map(([id, label]) => `<a href="#${id}" data-view="${id}">${ICONS[id]}<span>${label}</span></a>`).join("");
   $("#role-switch").innerHTML = Object.entries(ROLES)
-    .map(([id, r]) => `<button role="tab" aria-selected="${id === state.role}" class="${id === state.role ? "on" : ""}" data-role="${id}">${r.label}</button>`)
+    .map(([id, r]) => `<button role="tab" aria-selected="${id === user.role}" class="${id === user.role ? "on" : ""}" data-role="${id}"
+      title="${id === user.role ? `Signed in as ${r.label}` : `Sign in as ${r.label}`}">${id === user.role ? "" : '<span class="lock" aria-hidden="true">🔒</span>'}${r.label}</button>`)
     .join("");
   $("#role-note").innerHTML = `<span class="pill accent">${role.label} view</span><span>${role.note}</span>`;
-  const people = state.people[state.role];
-  $("#person-select").innerHTML = people.length
-    ? people.map((p) => `<option value="${p.id}" ${p.id === state.personId ? "selected" : ""}>${esc(p.name)}</option>`).join("")
-    : `<option>No ${role.label.toLowerCase()}s</option>`;
-  const p = person();
-  $("#avatar").textContent = p ? initials(p.name) : "?";
-  $("#avatar").dataset.role = state.role;
+  $("#user-name").textContent = user.name;
+  $("#user-role").textContent = `${role.label} · ${user.email}`;
+  $("#avatar").textContent = initials(user.name);
+  $("#avatar").dataset.role = user.role;
 }
 
 function setTheme(theme) {
@@ -228,36 +243,160 @@ async function loadEngine() {
   }
 }
 
+// Each role only loads the people it is allowed to see (the API enforces this too).
 async function loadPeople() {
-  const [students, staff] = await Promise.all([api("/students?limit=200"), api("/staff")]);
-  state.people = { student: students, teacher: staff.filter((s) => s.role === "teacher"), admin: staff.filter((s) => s.role === "admin") };
-  pickPerson(Number(store.get(`person:${state.role}`)));
+  const user = state.user;
+  if (user.role === "admin") {
+    const [students, staff] = await Promise.all([api("/students?limit=200"), api("/staff")]);
+    state.people = { student: students, teacher: staff.filter((s) => s.role === "teacher"), admin: staff.filter((s) => s.role === "admin") };
+  } else if (user.role === "teacher") {
+    state.people = { student: await api("/students?limit=200"), teacher: [user], admin: [] };
+  } else {
+    state.people = { student: [user], teacher: [], admin: [] };
+  }
 }
 
-function pickPerson(preferredId) {
-  const people = state.people[state.role];
-  state.personId = people.some((p) => p.id === preferredId) ? preferredId : people[0]?.id ?? null;
-  if (state.personId != null) store.set(`person:${state.role}`, String(state.personId));
+/* ===================== Sign-in ===================== */
+
+function showLogin(role = null, message = "") {
+  stopQuizKeys();
+  closeModal();
+  $("#login").hidden = false;
+  document.body.classList.add("signed-out");
+  renderLoginCard(role, message);
+}
+
+function hideLogin() {
+  $("#login").hidden = true;
+  document.body.classList.remove("signed-out");
+}
+
+function renderLoginCard(role, message = "") {
+  const card = $("#login-card");
+  const cancel = state.user
+    ? `<button type="button" class="btn ghost sm login-cancel" id="login-cancel">Stay signed in as ${esc(state.user.name)}</button>`
+    : "";
+  const notice = message ? `<div class="callout">${ICONS.info}<span>${esc(message)}</span></div>` : "";
+
+  if (!role) {
+    card.innerHTML = `
+      <h2>Sign in</h2>
+      <p class="muted">Choose how you use LearnPath AI. You'll be asked for that role's credentials.</p>
+      ${notice}
+      <div class="role-cards">${Object.entries(ROLES).map(([id, r]) => `
+        <button class="role-card" data-pick="${id}">
+          <span class="role-icon ${id}">${ICONS[r.icon]}</span>
+          <span class="role-text"><strong>${r.label}</strong><span class="small muted">${r.blurb}</span></span>
+          ${ICONS.arrowR}
+        </button>`).join("")}
+      </div>
+      ${cancel}`;
+    $$("[data-pick]", card).forEach((b) => b.addEventListener("click", () => renderLoginCard(b.dataset.pick)));
+  } else {
+    const r = ROLES[role];
+    card.innerHTML = `
+      <button type="button" class="back-link" id="login-back">${ICONS.arrowL} All roles</button>
+      <div class="row" style="flex-wrap:nowrap;gap:14px;margin-bottom:6px">
+        <span class="role-icon ${role}">${ICONS[r.icon]}</span>
+        <div><h2>Sign in as ${r.label}</h2><p class="muted small">${r.blurb}</p></div>
+      </div>
+      ${notice}
+      <form id="login-form" class="stack" style="gap:14px;margin-top:8px" novalidate>
+        <div class="field"><label for="login-email">Email</label>
+          <input class="input" id="login-email" type="email" autocomplete="username" required placeholder="you@school.edu"></div>
+        <div class="field"><label for="login-password">Password</label>
+          <div class="password-wrap">
+            <input class="input" id="login-password" type="password" autocomplete="current-password" required placeholder="Your password">
+            <button type="button" class="btn ghost sm" id="toggle-password" aria-label="Show password">Show</button>
+          </div></div>
+        <div class="login-error" id="login-error" role="alert" hidden></div>
+        <button class="btn gradient lg" id="login-submit">Sign in as ${r.label}</button>
+      </form>
+      <div class="demo-box">
+        <div class="label">Demo accounts: click one to fill in the form</div>
+        ${r.demo.map(([name, email]) => `
+          <button type="button" class="demo-account" data-email="${esc(email)}">
+            ${avatar(name, 32)}<span class="role-text"><strong>${esc(name)}</strong><span class="small muted">${esc(email)}</span></span>
+            <span class="pill neutral">Use</span>
+          </button>`).join("")}
+        <div class="small muted">Demo password: <code>${esc(r.password)}</code></div>
+      </div>
+      ${cancel}`;
+    $("#login-back").addEventListener("click", () => renderLoginCard(null));
+    $("#toggle-password").addEventListener("click", (e) => {
+      const input = $("#login-password");
+      input.type = input.type === "password" ? "text" : "password";
+      e.currentTarget.textContent = input.type === "password" ? "Show" : "Hide";
+    });
+    $$(".demo-account", card).forEach((b) =>
+      b.addEventListener("click", () => {
+        $("#login-email").value = b.dataset.email;
+        $("#login-password").value = r.password;
+        $("#login-submit").focus();
+      }),
+    );
+    $("#login-form").addEventListener("submit", (e) => signIn(e, role));
+    setTimeout(() => $("#login-email")?.focus(), 50);
+  }
+  $("#login-cancel")?.addEventListener("click", hideLogin);
+}
+
+async function signIn(event, role) {
+  event.preventDefault();
+  const email = $("#login-email").value.trim();
+  const password = $("#login-password").value;
+  const error = $("#login-error");
+  const button = $("#login-submit");
+  if (!email || !password) {
+    error.textContent = "Enter your email and password.";
+    error.hidden = false;
+    return;
+  }
+  error.hidden = true;
+  const label = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner"></span> Signing in…';
+  try {
+    const session = await api("/auth/login", { method: "POST", body: { email, password, role } });
+    await startSession(session.access_token, session.user);
+    toast(`Welcome, ${session.user.name}`, "success");
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+    $("#login-password")?.select();
+  } finally {
+    button.disabled = false;
+    button.innerHTML = label;
+  }
+}
+
+async function startSession(token, user) {
+  state.token = token;
+  state.user = user;
+  store.set("token", token);
+  hideLogin();
   renderShell();
-}
-
-function selectRole(role, personId) {
-  state.role = role;
-  store.set("role", role);
-  pickPerson(personId ?? Number(store.get(`person:${role}`)));
-  const target = `#${ROLES[role].nav[0][0]}`;
-  if (location.hash === target) route();
-  else location.hash = target;
-}
-
-function selectPerson(id) {
-  pickPerson(id);
+  setView(loading(3));
+  const [, topics] = await Promise.all([loadPeople(), api("/topics")]);
+  state.topics = topics;
   route();
 }
 
-// Lets a teacher or admin see exactly what a student sees.
-function viewAsStudent(id) {
-  selectRole("student", id);
+function signOut(message = "") {
+  state.token = null;
+  state.user = null;
+  state.people = { student: [], teacher: [], admin: [] };
+  store.remove("token");
+  history.replaceState(null, "", location.pathname);
+  $("#view").innerHTML = "";
+  showLogin(null, message);
+}
+
+// Switching to another role always means signing in with that role's credentials.
+function selectRole(role) {
+  if (role === state.role) return;
+  const current = ROLES[state.role].label;
+  showLogin(role, `You're signed in as ${state.user.name} (${current}). Enter ${ROLES[role].label.toLowerCase()} credentials to switch.`);
 }
 
 /* ===================== Router ===================== */
@@ -270,6 +409,7 @@ const VIEWS = {
 
 function route() {
   stopQuizKeys();
+  if (!state.user) return showLogin();
   closeModal();
   const [name, arg] = location.hash.slice(1).split("/");
   const role = ROLES[state.role];
@@ -281,26 +421,13 @@ function route() {
   }
   $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name || (name === "student" && a.dataset.view === role.nav[0][0])));
   $("#page-title").textContent = allowed.get(name);
-  if (state.personId == null) {
-    const msg = state.role === "student" ? "No students yet" : `No ${role.label.toLowerCase()}s yet`;
-    setView(emptyState("users", msg, "Switch to the Admin view to add people.", `<button class="btn" onclick="selectRole('admin')">Go to Admin</button>`));
-    return;
-  }
   VIEWS[name](arg).catch(handleViewError);
 }
 
-let recovering = false;
-
 function handleViewError(err) {
-  if (err.status === 404 && /Student|Staff/.test(err.message) && !recovering) {
-    // Serverless storage can reset; reload people and fall back to someone who exists.
-    recovering = true;
-    loadPeople()
-      .then(() => {
-        if (location.hash.startsWith("#student/")) location.hash = `#${ROLES[state.role].nav[0][0]}`;
-        else route();
-      })
-      .finally(() => setTimeout(() => (recovering = false), 500));
+  if (err.status === 401) return; // api() already sent the user back to the sign-in screen
+  if (err.status === 403) {
+    setView(emptyState("validator", "You don't have access to this", err.message, `<a class="btn ghost" href="#${ROLES[state.role].nav[0][0]}">Go to my home page</a>`));
     return;
   }
   setView(emptyState("alert", "Something went wrong", err.message, `<button class="btn ghost" onclick="route()">Try again</button>`));
@@ -425,8 +552,7 @@ function activityRow(s) {
 async function practice() {
   setView(loading(2));
   state.topics = await api("/topics");
-  const questions = await api("/questions");
-  const perTopic = Object.fromEntries(state.topics.map((t) => [t.id, questions.filter((q) => q.topic_id === t.id).length]));
+  const perTopic = Object.fromEntries(state.topics.map((t) => [t.id, t.question_count]));
   const selectable = state.topics.filter((t) => perTopic[t.id] > 0);
 
   const el = setView(`
@@ -964,9 +1090,13 @@ function lastActive(iso) {
 
 /* ===================== Teacher: class overview ===================== */
 
-async function classView() {
+async function classView(teacherId) {
   setView(loading(3));
-  const teacher = person();
+  let teacher = state.user;
+  if (state.role === "admin") {
+    teacher = state.people.teacher.find((t) => t.id === Number(teacherId));
+    if (!teacher) return void (location.hash = "#admin");
+  }
   const report = await api(`/reports/class?teacher_id=${teacher.id}`);
   const attention = report.students
     .filter((s) => s.gap_topics.length || s.overall_mastery == null)
@@ -976,7 +1106,7 @@ async function classView() {
   const el = setView(`
     <div class="page-head">
       <div><h1>${esc(teacher.name)}'s class</h1><p>${teacher.subject ? `${esc(teacher.subject)} · ` : ""}${report.student_count} students. Mastery and gaps update as soon as students submit quizzes and homework.</p></div>
-      <a class="btn gradient" href="#assign">${ICONS.assign} Assign homework</a>
+      ${state.role === "teacher" ? `<a class="btn gradient" href="#assign">${ICONS.assign} Assign homework</a>` : `<a class="btn ghost" href="#admin">${ICONS.arrowL} Overview</a>`}
     </div>
     <section class="grid cols-4" style="margin-bottom:20px">
       ${statCard("accent", "users", report.student_count, "Students")}
@@ -1042,7 +1172,7 @@ async function studentInsights(id) {
     api(`/students/${sid}/learning-gaps`),
     api(`/students/${sid}/submissions?limit=8`),
   ]);
-  const back = state.role === "teacher" ? ["#class", "My class"] : ["#users", "Users"];
+  const back = state.role === "teacher" ? ["#class", "My class"] : s.teacher_id ? [`#class/${s.teacher_id}`, "Class"] : ["#users", "Users"];
   const lastSeen = history[0]?.submitted_at;
 
   const el = setView(`
@@ -1054,7 +1184,6 @@ async function studentInsights(id) {
         <div class="muted small">${esc(s.email)} · Grade ${s.grade_level} · Teacher: ${esc(teacherName(s.teacher_id))}</div>
       </div>
       <div class="row">
-        <button class="btn ghost" id="view-as">${ICONS.eye} View as student</button>
         <button class="btn gradient" data-assign-topic="" data-assign-student="${s.id}" data-busy="Assigning…">${ICONS.assign} Assign homework</button>
       </div>
     </div>
@@ -1081,7 +1210,6 @@ async function studentInsights(id) {
       </div>
     </section>`);
 
-  $("#view-as", el).addEventListener("click", () => viewAsStudent(s.id));
   bindAssignButtons(el);
   animateBars(el);
 }
@@ -1090,8 +1218,7 @@ async function studentInsights(id) {
 
 async function assignView() {
   setView(loading(2));
-  const teacher = person();
-  const [roster, topics] = await Promise.all([api(`/students?teacher_id=${teacher.id}&limit=200`), api("/topics")]);
+  const [roster, topics] = await Promise.all([api("/students?limit=200"), api("/topics")]);
   state.topics = topics;
 
   const el = setView(`
@@ -1205,7 +1332,7 @@ async function adminView() {
           <td>${t.question_count ? t.question_count : '<span class="pill warn">None yet</span>'}</td></tr>`).join("")}</tbody>
       </table></div>
     </div>`);
-  $$("[data-open-class]", el).forEach((b) => b.addEventListener("click", () => selectRole("teacher", Number(b.dataset.openClass))));
+  $$("[data-open-class]", el).forEach((b) => b.addEventListener("click", () => (location.hash = `#class/${b.dataset.openClass}`)));
 }
 
 /* ===================== Admin: users ===================== */
@@ -1228,7 +1355,7 @@ async function usersView(tab = "students") {
           <td><div class="row" style="flex-wrap:nowrap">${avatar(s.name, 30)}<a href="#student/${s.id}" style="font-weight:600;color:var(--text)">${esc(s.name)}</a></div></td>
           <td class="muted">${esc(s.email)}</td><td>${s.grade_level}</td>
           <td><select class="input compact" data-teacher-for="${s.id}">${teacherOptions(s.teacher_id)}</select></td>
-          <td class="actions"><button class="btn sm ghost" data-view-as="${s.id}" title="View as this student">${ICONS.eye}</button>
+          <td class="actions"><a class="btn sm ghost" href="#student/${s.id}" title="Student insights">${ICONS.eye}</a>
             <button class="btn sm ghost danger" data-delete="students/${s.id}" data-name="${esc(s.name)}" title="Delete">${ICONS.trash}</button></td>
         </tr>`).join("")}</tbody>`,
     teachers: () => `
@@ -1273,8 +1400,7 @@ async function usersView(tab = "students") {
       }
     }),
   );
-  $$("[data-view-as]", el).forEach((b) => b.addEventListener("click", () => viewAsStudent(Number(b.dataset.viewAs))));
-  $$("[data-open-class]", el).forEach((b) => b.addEventListener("click", () => selectRole("teacher", Number(b.dataset.openClass))));
+  $$("[data-open-class]", el).forEach((b) => b.addEventListener("click", () => (location.hash = `#class/${b.dataset.openClass}`)));
   $$("[data-delete]", el).forEach((b) =>
     b.addEventListener("click", async () => {
       const extra = b.dataset.delete.startsWith("students") ? " Their quiz history and homework will be deleted too." : "";
@@ -1299,6 +1425,9 @@ function addUserModal(defaultRole = "student") {
         <select class="input" id="u-role">${Object.entries(ROLES).map(([id, r]) => `<option value="${id}" ${id === defaultRole ? "selected" : ""}>${r.label}</option>`).join("")}</select></div>
       <div class="field"><label for="u-name">Full name</label><input class="input" id="u-name" required maxlength="120" placeholder="e.g. Meera Iyer"></div>
       <div class="field"><label for="u-email">Email</label><input class="input" id="u-email" type="email" required placeholder="meera@school.edu"></div>
+      <div class="field"><label for="u-password">Initial password</label>
+        <input class="input" id="u-password" type="text" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="At least 8 characters">
+        <span class="small muted">Share it with the user; they sign in with this email and password.</span></div>
       <div class="grid cols-2" style="gap:12px" data-for="student">
         <div class="field"><label for="u-grade">Grade</label>
           <select class="input" id="u-grade">${Array.from({ length: 12 }, (_, i) => `<option ${i === 6 ? "selected" : ""}>${i + 1}</option>`).join("")}</select></div>
@@ -1315,7 +1444,7 @@ function addUserModal(defaultRole = "student") {
     e.preventDefault();
     withBusy(e.submitter, async () => {
       const role = $("#u-role").value;
-      const base = { name: $("#u-name").value.trim(), email: $("#u-email").value.trim() };
+      const base = { name: $("#u-name").value.trim(), email: $("#u-email").value.trim(), password: $("#u-password").value };
       const created = role === "student"
         ? await api("/students", { method: "POST", body: { ...base, grade_level: Number($("#u-grade").value), teacher_id: Number($("#u-teacher").value) || null } })
         : await api("/staff", { method: "POST", body: { ...base, role, subject: $("#u-subject").value.trim() } });
@@ -1373,25 +1502,31 @@ async function topicsView() {
 /* ===================== Boot ===================== */
 
 async function boot() {
-  state.role = ROLES[store.get("role")] ? store.get("role") : "student";
-  renderShell();
   setTheme(currentTheme());
   $("#theme-toggle").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
-  $("#role-switch").addEventListener("click", (e) => e.target.dataset.role && selectRole(e.target.dataset.role));
-  $("#person-select").addEventListener("change", (e) => selectPerson(Number(e.target.value)));
+  $("#role-switch").addEventListener("click", (e) => {
+    const button = e.target.closest("[data-role]");
+    if (button) selectRole(button.dataset.role);
+  });
+  $("#logout").addEventListener("click", () => {
+    signOut();
+    toast("Signed out");
+  });
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal").addEventListener("click", (e) => e.target.id === "modal" && closeModal());
   document.addEventListener("keydown", (e) => e.key === "Escape" && closeModal());
   window.addEventListener("hashchange", route);
-
-  setView(loading(3));
   loadEngine();
+
+  const saved = store.get("token");
+  if (!saved) return showLogin();
+  state.token = saved;
   try {
-    const [, topics] = await Promise.all([loadPeople(), api("/topics")]);
-    state.topics = topics;
-    route();
-  } catch (err) {
-    handleViewError(err);
+    // The stored token is only trusted once the server confirms who it belongs to.
+    const user = await api("/auth/me");
+    await startSession(saved, user);
+  } catch {
+    if (state.token) signOut();
   }
 }
 
