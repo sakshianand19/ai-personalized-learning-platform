@@ -49,8 +49,14 @@ def create_app() -> FastAPI:
         app.include_router(router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["meta"])
-    def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__, "llm_provider": llm_provider_name()}
+    def health() -> dict[str, str | bool]:
+        return {
+            "status": "ok",
+            "version": __version__,
+            "llm_provider": llm_provider_name(),
+            # Lets the sign-up form show the admin option; never reveals the code itself.
+            "admin_signup": get_settings().admin_signup_enabled,
+        }
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

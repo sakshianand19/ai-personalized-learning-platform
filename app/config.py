@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Signs session tokens. Set a long random value in production; every instance must share it.
     secret_key: str = DEV_SECRET_KEY
     session_hours: int = 8
+    # Required to sign up as an admin. When unset, admin sign-up is switched off entirely.
+    admin_invite_code: str | None = None
+
+    @property
+    def admin_signup_enabled(self) -> bool:
+        return bool(self.admin_invite_code)
 
     # A topic whose mastery is below this threshold is reported as a learning gap.
     mastery_threshold: float = 0.6

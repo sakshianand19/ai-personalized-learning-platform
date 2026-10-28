@@ -77,6 +77,7 @@ class SignupRequest(BaseModel):
     role: Literal["admin", "teacher", "student"]
     grade_level: int | None = Field(default=None, ge=1, le=12, description="Required for students.")
     subject: str = Field(default="", max_length=80, description="Optional, for teachers.")
+    invite_code: str | None = Field(default=None, max_length=200, description="Required for admins.")
 
     @model_validator(mode="after")
     def _student_needs_grade(self) -> "SignupRequest":

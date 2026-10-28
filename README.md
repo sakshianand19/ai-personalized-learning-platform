@@ -46,9 +46,10 @@ a class of six students with quiz history, so every view has data from the start
 | --- | --- |
 | ![Sign-in form with email and password](docs/screenshots/sign-in.png) | ![Create-account form with a choice of student, teacher or admin](docs/screenshots/sign-up.png) |
 
-> **Open sign-up includes Admin.** Anyone who can reach the app can create an admin account and
-> manage every user. That suits a demo; a real deployment should restrict admin sign-up (for
-> example to an invite code or an existing admin).
+**Admin sign-up is invite-only.** Choosing Admin asks for an invite code, which must match the
+server's `ADMIN_INVITE_CODE` (compared in constant time). If no code is configured, admin
+sign-up is switched off and the option shows as unavailable; student and teacher sign-up are
+always open. Existing admins can still create accounts of any role from the **Users** page.
 
 **Demo accounts** for trying each role:
 
@@ -260,6 +261,7 @@ Open http://localhost:8000 for the web app or http://localhost:8000/docs for the
 | `DATABASE_URL` | SQLite (`/tmp` on Vercel) | Any SQLAlchemy URL; `postgres://` URLs are supported |
 | `SECRET_KEY` | development key | Signs session tokens. **Set a long random value in production**; all instances must share it |
 | `SESSION_HOURS` | `8` | How long a sign-in lasts |
+| `ADMIN_INVITE_CODE` | – | Code required to sign up as an admin. **Unset means admin sign-up is off** |
 | `SEED_DEMO_DATA` | `true` | Seed demo topics, content, questions, staff and a class with quiz history |
 | `MASTERY_THRESHOLD` | `0.6` | Mastery below this is a learning gap |
 | `MIN_ATTEMPTS_FOR_GAP` | `2` | Answers needed before a topic can be judged |
@@ -281,7 +283,8 @@ The app is deployed on Vercel, which detects FastAPI automatically from `app/mai
 configuration is needed.
 
 1. Import the GitHub repo at [vercel.com/new](https://vercel.com/new) (no build settings needed).
-2. Under **Settings → Environment Variables**, set `SECRET_KEY` to a long random string (for
+2. Under **Settings → Environment Variables**, set `ADMIN_INVITE_CODE` if you want to allow admin
+   sign-up (share it only with people who should be admins), and set `SECRET_KEY` to a long random string (for
    example the output of `python -c "import secrets; print(secrets.token_urlsafe(48))"`), and
    optionally the Azure OpenAI variables. Without `SECRET_KEY` the app falls back to a public
    development key, which means anyone who reads this repo could forge a session token.

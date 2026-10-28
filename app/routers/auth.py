@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,6 +40,14 @@ def _session(user: Staff | Student, role: str, settings: Settings) -> LoginRespo
     return LoginResponse(access_token=token, expires_in=ttl, user=_user_info(user, role))
 
 
+def _check_admin_invite(code: str | None, settings: Settings) -> None:
+    if not settings.admin_signup_enabled:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin sign-up is not available")
+    # Constant-time comparison so the code can't be guessed character by character.
+    if not code or not hmac.compare_digest(code.strip().encode(), settings.admin_invite_code.encode()):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid admin invite code")
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
     """Sign in with email and password. The account's role decides what the user can access."""
@@ -55,8 +65,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), settings: Settin
 def signup(payload: SignupRequest, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
     """Create an account with the chosen role and sign it in.
 
-    Students start without a teacher; an admin assigns them to a class.
+    Students start without a teacher; an admin assigns them to a class. Admin accounts need the
+    ``ADMIN_INVITE_CODE``; without one configured, admin sign-up is switched off.
     """
+    if payload.role == "admin":
+        _check_admin_invite(payload.invite_code, settings)
     email = payload.email.strip().lower()
     ensure_email_available(db, email)
     password_hash = hash_password(payload.password)

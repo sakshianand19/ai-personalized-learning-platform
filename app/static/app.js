@@ -113,6 +113,7 @@ const state = {
   topics: [],
   quiz: null,
   keyHandler: null,
+  adminSignup: false, // from /health: is an admin invite code configured on the server?
 };
 Object.defineProperty(state, "role", { get: () => state.user?.role ?? null });
 // Student views read this: the signed-in student's own id.
@@ -227,6 +228,8 @@ function currentTheme() {
 async function loadEngine() {
   try {
     const health = await fetch("/health").then((r) => r.json());
+    state.adminSignup = health.admin_signup === true;
+    applyAdminSignupAvailability();
     const azure = health.llm_provider === "azure_openai";
     $("#engine").className = `engine ${azure ? "azure" : "heuristic"}`;
     $("#engine-label").textContent = azure ? "Azure OpenAI · LangChain" : "Heuristic engine (no Azure key)";
@@ -303,9 +306,12 @@ function renderLoginCard(mode = "signin", message = "") {
             <label class="role-option">
               <input type="radio" name="signup-role" value="${id}" ${i === 0 ? "checked" : ""}>
               <span class="role-icon ${id}">${ICONS[r.icon]}</span>
-              <span class="role-text"><strong>${r.label}</strong><span class="small muted">${r.blurb}</span></span>
+              <span class="role-text"><strong>${r.label}${id === "admin" ? ' <span class="pill neutral invite-pill">Invite only</span>' : ""}</strong><span class="small muted">${r.blurb}</span></span>
             </label>`).join("")}
           </div></div>
+        <div class="field hidden" data-for-role="admin"><label for="auth-invite">Admin invite code</label>
+          <input class="input" id="auth-invite" autocomplete="off" maxlength="200" placeholder="Code from your organisation">
+          <span class="small muted">Admin accounts need an invite code from an existing administrator.</span></div>
         <div class="field"><label for="auth-name">Full name</label>
           <input class="input" id="auth-name" autocomplete="name" required maxlength="120" placeholder="e.g. Meera Iyer"></div>
         <div class="field"><label for="auth-email">Email</label>
@@ -325,6 +331,7 @@ function renderLoginCard(mode = "signin", message = "") {
       $$("[data-for-role]", card).forEach((el) => el.classList.toggle("hidden", el.dataset.forRole !== role));
     };
     $$("input[name=signup-role]", card).forEach((r) => r.addEventListener("change", syncRole));
+    applyAdminSignupAvailability();
   }
 
   $$("[data-mode]", card).forEach((b) => b.addEventListener("click", () => renderLoginCard(b.dataset.mode)));
@@ -343,6 +350,21 @@ function renderLoginCard(mode = "signin", message = "") {
   );
   $("#auth-form").addEventListener("submit", (e) => submitAuth(e, mode));
   setTimeout(() => $(mode === "signin" ? "#auth-email" : "#auth-name")?.focus(), 50);
+}
+
+// The server decides; this only stops people choosing an option that can't succeed.
+function applyAdminSignupAvailability() {
+  const input = $("input[name=signup-role][value=admin]");
+  if (!input) return;
+  const option = input.closest(".role-option");
+  input.disabled = !state.adminSignup;
+  option.classList.toggle("disabled", !state.adminSignup);
+  option.title = state.adminSignup ? "" : "Admin sign-up isn't available on this server";
+  $(".invite-pill", option).textContent = state.adminSignup ? "Invite only" : "Not available";
+  if (!state.adminSignup && input.checked) {
+    $("input[name=signup-role][value=student]").checked = true;
+    $("input[name=signup-role][value=student]").dispatchEvent(new Event("change"));
+  }
 }
 
 function authError(message) {
@@ -368,6 +390,10 @@ async function submitAuth(event, mode) {
     body = { name, email, password, role };
     if (role === "student") body.grade_level = Number($("#auth-grade").value);
     if (role === "teacher") body.subject = $("#auth-subject").value.trim();
+    if (role === "admin") {
+      body.invite_code = $("#auth-invite").value.trim();
+      if (!body.invite_code) return authError("Enter the admin invite code.");
+    }
   } else if (!email || !password) {
     return authError("Enter your email and password.");
   }

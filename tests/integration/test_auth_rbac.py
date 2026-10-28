@@ -10,6 +10,7 @@ import pytest
 
 from app.config import get_settings
 from app.security import create_token, decode_token, hash_password, verify_password
+from tests.conftest import ADMIN_INVITE_CODE
 
 API = "/api/v1"
 ADMIN, PRIYA, ROHAN = 1, 2, 3
@@ -91,10 +92,10 @@ def test_login_rejects_bad_credentials(anonymous_client, seeded, email, password
     [
         ({"name": "Riya Sen", "email": "Riya@Mail.example", "role": "student", "grade_level": 9}, "student"),
         ({"name": "Mr. Arjun Das", "email": "arjun@mail.example", "role": "teacher", "subject": "History"}, "teacher"),
-        ({"name": "Kiran Rao", "email": "kiran@mail.example", "role": "admin"}, "admin"),
+        ({"name": "Kiran Rao", "email": "kiran@mail.example", "role": "admin", "invite_code": ADMIN_INVITE_CODE}, "admin"),
     ],
 )
-def test_signup_creates_an_account_and_signs_it_in(anonymous_client, payload, role):
+def test_signup_creates_an_account_and_signs_it_in(anonymous_client, admin_invites, payload, role):
     response = anonymous_client.post(f"{API}/auth/signup", json=payload | {"password": "Welcome@123"})
     assert response.status_code == 201
     session = response.json()
@@ -108,14 +109,14 @@ def test_signup_creates_an_account_and_signs_it_in(anonymous_client, payload, ro
     assert login.json()["user"]["role"] == role
 
 
-def test_signed_up_users_get_their_roles_permissions(anonymous_client, seeded):
+def test_signed_up_users_get_their_roles_permissions(anonymous_client, admin_invites, seeded):
     def signup(**fields):
         body = anonymous_client.post(f"{API}/auth/signup", json=fields | {"password": "Welcome@123"}).json()
         return {"Authorization": f"Bearer {body['access_token']}"}, body["user"]["id"]
 
     student, student_id = signup(name="Riya", email="riya@mail.example", role="student", grade_level=9)
     teacher, _ = signup(name="Arjun", email="arjun@mail.example", role="teacher")
-    admin, _ = signup(name="Kiran", email="kiran@mail.example", role="admin")
+    admin, _ = signup(name="Kiran", email="kiran@mail.example", role="admin", invite_code=admin_invites)
 
     assert anonymous_client.get(f"{API}/students/{student_id}/learning-gaps", headers=student).status_code == 200
     assert anonymous_client.get(f"{API}/students", headers=student).status_code == 403
@@ -296,3 +297,41 @@ def test_session_expiry_is_configured():
     token = create_token({"sub": 1, "role": "admin"}, "k", 1)
     time.sleep(1.1)
     assert decode_token(token, "k") is None
+
+
+# --- Admin invite code ------------------------------------------------------------------
+
+ADMIN_SIGNUP = {"name": "Kiran Rao", "email": "kiran@mail.example", "role": "admin", "password": "Welcome@123"}
+
+
+def test_admin_signup_is_off_without_a_configured_code(anonymous_client):
+    response = anonymous_client.post(f"{API}/auth/signup", json=ADMIN_SIGNUP | {"invite_code": "anything"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin sign-up is not available"
+    assert anonymous_client.get("/health").json()["admin_signup"] is False
+    # Students and teachers can still sign up.
+    teacher = {"name": "T", "email": "t@mail.example", "role": "teacher", "password": "Welcome@123"}
+    assert anonymous_client.post(f"{API}/auth/signup", json=teacher).status_code == 201
+
+
+@pytest.mark.parametrize("code", [None, "", "wrong-code", ADMIN_INVITE_CODE + "x", ADMIN_INVITE_CODE.upper()])
+def test_admin_signup_rejects_missing_or_wrong_codes(anonymous_client, admin_invites, code):
+    payload = ADMIN_SIGNUP | ({"invite_code": code} if code is not None else {})
+    response = anonymous_client.post(f"{API}/auth/signup", json=payload)
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Invalid admin invite code"
+    # No account was created.
+    login = anonymous_client.post(f"{API}/auth/login", json={"email": ADMIN_SIGNUP["email"], "password": "Welcome@123"})
+    assert login.status_code == 401
+
+
+def test_admin_signup_with_the_right_code(anonymous_client, admin_invites):
+    response = anonymous_client.post(f"{API}/auth/signup", json=ADMIN_SIGNUP | {"invite_code": f"  {admin_invites} "})
+    assert response.status_code == 201
+    assert response.json()["user"]["role"] == "admin"
+
+
+def test_invite_code_is_ignored_for_other_roles(anonymous_client):
+    student = {"name": "S", "email": "s@mail.example", "role": "student", "grade_level": 5,
+               "password": "Welcome@123", "invite_code": "irrelevant"}
+    assert anonymous_client.post(f"{API}/auth/signup", json=student).status_code == 201

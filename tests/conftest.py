@@ -4,7 +4,7 @@ import os
 # also override anything in a local .env, so tests never call a real model.
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["SEED_DEMO_DATA"] = "false"
-for key in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_DEPLOYMENT"):
+for key in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_DEPLOYMENT", "ADMIN_INVITE_CODE"):
     os.environ[key] = ""
 
 import json  # noqa: E402
@@ -59,6 +59,17 @@ def client(anonymous_client):
     """Signed in as an admin, who may call every endpoint; RBAC itself is tested separately."""
     anonymous_client.headers.update(auth_headers("admin", 1, "Test admin"))
     return anonymous_client
+
+
+ADMIN_INVITE_CODE = "test-admin-invite"
+
+
+@pytest.fixture
+def admin_invites():
+    """Enable admin sign-up with ``ADMIN_INVITE_CODE`` (it's off when no code is configured)."""
+    settings = get_settings().model_copy(update={"admin_invite_code": ADMIN_INVITE_CODE})
+    app.dependency_overrides[get_settings] = lambda: settings
+    return ADMIN_INVITE_CODE
 
 
 @pytest.fixture
