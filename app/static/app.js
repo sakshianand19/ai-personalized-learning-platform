@@ -87,8 +87,6 @@ const ROLES = {
     blurb: "Take quizzes, do homework and follow your learning path.",
     nav: [["dashboard", "Dashboard"], ["practice", "Practice"], ["homework", "Homework"], ["path", "Learning Path"]],
     note: "You can see only your own progress.",
-    demo: [["Demo Student", "demo@student.example"], ["Aarav Sharma", "aarav@student.example"]],
-    password: "Student@123",
   },
   teacher: {
     label: "Teacher",
@@ -97,8 +95,6 @@ const ROLES = {
     nav: [["class", "My Class"], ["assign", "Assign Homework"], ["studio", "Content Studio"], ["validator", "Validator"]],
     hidden: { student: "Student Insights" },
     note: "You can see only students in your class.",
-    demo: [["Ms. Priya Verma", "priya.verma@learnpath.example"], ["Mr. Rohan Mehta", "rohan.mehta@learnpath.example"]],
-    password: "Teacher@123",
   },
   admin: {
     label: "Admin",
@@ -107,8 +103,6 @@ const ROLES = {
     nav: [["admin", "Overview"], ["users", "Users"], ["topics", "Topics"], ["studio", "Content Studio"], ["validator", "Validator"]],
     hidden: { student: "Student Insights", class: "Class" },
     note: "Full access to every class and account.",
-    demo: [["Neha Kapoor", "admin@learnpath.example"]],
-    password: "Admin@123",
   },
 };
 
@@ -220,6 +214,8 @@ function renderShell() {
   $("#user-role").textContent = `${role.label} · ${user.email}`;
   $("#avatar").textContent = initials(user.name);
   $("#avatar").dataset.role = user.role;
+  // The AI engine status is an operational detail for staff, not something students need.
+  $("#engine").classList.toggle("hidden", user.role === "student");
 }
 
 function setTheme(theme) {
@@ -312,15 +308,6 @@ function renderLoginCard(role, message = "") {
         <div class="login-error" id="login-error" role="alert" hidden></div>
         <button class="btn gradient lg" id="login-submit">Sign in as ${r.label}</button>
       </form>
-      <div class="demo-box">
-        <div class="label">Demo accounts: click one to fill in the form</div>
-        ${r.demo.map(([name, email]) => `
-          <button type="button" class="demo-account" data-email="${esc(email)}">
-            ${avatar(name, 32)}<span class="role-text"><strong>${esc(name)}</strong><span class="small muted">${esc(email)}</span></span>
-            <span class="pill neutral">Use</span>
-          </button>`).join("")}
-        <div class="small muted">Demo password: <code>${esc(r.password)}</code></div>
-      </div>
       ${cancel}`;
     $("#login-back").addEventListener("click", () => renderLoginCard(null));
     $("#toggle-password").addEventListener("click", (e) => {
@@ -328,13 +315,6 @@ function renderLoginCard(role, message = "") {
       input.type = input.type === "password" ? "text" : "password";
       e.currentTarget.textContent = input.type === "password" ? "Show" : "Hide";
     });
-    $$(".demo-account", card).forEach((b) =>
-      b.addEventListener("click", () => {
-        $("#login-email").value = b.dataset.email;
-        $("#login-password").value = r.password;
-        $("#login-submit").focus();
-      }),
-    );
     $("#login-form").addEventListener("submit", (e) => signIn(e, role));
     setTimeout(() => $("#login-email")?.focus(), 50);
   }

@@ -38,9 +38,9 @@ that role's email and password; switching role from the top bar asks for the oth
 credentials too. The demo is seeded with an admin, two teachers and a class of six students with
 quiz history, so every view has data from the start.
 
-![Sign-in screen with the teacher credentials form and demo accounts](docs/screenshots/sign-in.png)
+![Sign-in screen with the teacher credentials form](docs/screenshots/sign-in.png)
 
-**Demo accounts** (also shown on the sign-in screen):
+**Demo accounts** for trying each role:
 
 | Role | Email | Password |
 | --- | --- | --- |
