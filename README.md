@@ -34,8 +34,8 @@ it reaches students.
 ## Sign-in and role-based access (RBAC)
 
 Every visitor starts at a sign-in screen. Choose **Student**, **Teacher** or **Admin** and enter
-that role's email and password; switching role from the top bar asks for the other role's
-credentials too. The demo is seeded with an admin, two teachers and a class of six students with
+that role's email and password. To use a different role, sign out and sign in again as that
+role. The demo is seeded with an admin, two teachers and a class of six students with
 quiz history, so every view has data from the start.
 
 ![Sign-in screen with the teacher credentials form](docs/screenshots/sign-in.png)

@@ -360,19 +360,11 @@ kbd { font: inherit; font-size: 11.5px; padding: 1px 6px; border-radius: 5px; bo
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 /* ---------- Roles ---------- */
-.role-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
-.role-switch button {
-  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
-  padding: 6px 14px; border-radius: 999px; cursor: pointer; transition: all .15s;
-}
-.role-switch button:hover { color: var(--text); }
-.role-switch button.on { background: var(--surface); color: var(--accent-text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line); }
 .avatar[data-role="teacher"] { background: linear-gradient(135deg, #0f9d74, #34c3a0); }
 .avatar[data-role="admin"] { background: linear-gradient(135deg, #e0761f, #f2a541); }
 .role-note { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 0 4px 4px; }
 .role-note .pill { align-self: flex-start; }
 
-.role-switch .lock { font-size: 10px; margin-right: 4px; opacity: .7; }
 
 /* ---------- Signed-in user ---------- */
 .user-chip { display: flex; align-items: center; gap: 10px; padding: 4px 12px 4px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); min-width: 0; }
@@ -483,10 +475,7 @@ body.signed-out .app { display: none; }
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; }
   .topbar-actions { width: 100%; gap: 6px; }
-  .role-switch { flex: none; }
-  .role-switch button { padding: 6px 8px; font-size: 12px; }
-  .role-switch .lock { display: none; }
-  .user-chip { flex: 1; padding-right: 8px; }
+        .user-chip { flex: 1; padding-right: 8px; }
   .user-chip .avatar { width: 26px; height: 26px; font-size: 11px; }
   .user-role { display: none; }
   .icon-only { flex: none; width: 34px; height: 34px; }

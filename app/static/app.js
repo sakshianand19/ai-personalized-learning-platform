@@ -205,10 +205,6 @@ function renderShell() {
   const user = state.user;
   const role = ROLES[user.role];
   $("#nav").innerHTML = role.nav.map(([id, label]) => `<a href="#${id}" data-view="${id}">${ICONS[id]}<span>${label}</span></a>`).join("");
-  $("#role-switch").innerHTML = Object.entries(ROLES)
-    .map(([id, r]) => `<button role="tab" aria-selected="${id === user.role}" class="${id === user.role ? "on" : ""}" data-role="${id}"
-      title="${id === user.role ? `Signed in as ${r.label}` : `Sign in as ${r.label}`}">${id === user.role ? "" : '<span class="lock" aria-hidden="true">🔒</span>'}${r.label}</button>`)
-    .join("");
   $("#role-note").innerHTML = `<span class="pill accent">${role.label} view</span><span>${role.note}</span>`;
   $("#user-name").textContent = user.name;
   $("#user-role").textContent = `${role.label} · ${user.email}`;
@@ -370,13 +366,6 @@ function signOut(message = "") {
   history.replaceState(null, "", location.pathname);
   $("#view").innerHTML = "";
   showLogin(null, message);
-}
-
-// Switching to another role always means signing in with that role's credentials.
-function selectRole(role) {
-  if (role === state.role) return;
-  const current = ROLES[state.role].label;
-  showLogin(role, `You're signed in as ${state.user.name} (${current}). Enter ${ROLES[role].label.toLowerCase()} credentials to switch.`);
 }
 
 /* ===================== Router ===================== */
@@ -1484,10 +1473,6 @@ async function topicsView() {
 async function boot() {
   setTheme(currentTheme());
   $("#theme-toggle").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
-  $("#role-switch").addEventListener("click", (e) => {
-    const button = e.target.closest("[data-role]");
-    if (button) selectRole(button.dataset.role);
-  });
   $("#logout").addEventListener("click", () => {
     signOut();
     toast("Signed out");
